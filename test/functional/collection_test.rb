@@ -11,6 +11,8 @@ class TestCollection < Test::Unit::TestCase
     @@test.remove
   end
 
+=begin
+capped collections are unimplemented in tokudb:
   def test_capped_method
     @@db.create_collection('normal')
     assert !@@db['normal'].capped?
@@ -20,6 +22,7 @@ class TestCollection < Test::Unit::TestCase
     assert @@db['c'].capped?
     @@db.drop_collection('c')
   end
+=end
 
   def test_optional_pk_factory
     @coll_default_pk = @@db.collection('stuff')
@@ -80,6 +83,8 @@ class TestCollection < Test::Unit::TestCase
     assert_equal 5, @@db.collection("test.foo").find_one()["x"]
   end
 
+=begin
+rename is unimplemented in tokudb:
   def test_rename_collection
     @@db.drop_collection('foo1')
     @@db.drop_collection('bar1')
@@ -90,6 +95,7 @@ class TestCollection < Test::Unit::TestCase
     @col.rename('bar1')
     assert_equal 'bar1', @col.name
   end
+=end
 
   def test_nil_id
     assert_equal 5, @@test.insert({"_id" => 5, "foo" => "bar"})
@@ -165,6 +171,8 @@ class TestCollection < Test::Unit::TestCase
     assert_equal 3, @@test.count
   end
 
+=begin
+continue_on_error is unimplemented in tokudb:
   def test_bulk_insert_with_continue_on_error
     if @@version >= "2.0"
       @@test.create_index([["foo", 1]], :unique => true)
@@ -193,6 +201,7 @@ class TestCollection < Test::Unit::TestCase
       @@test.drop_index("foo_1")
     end
   end
+=end
 
   def test_bson_valid_with_collect_on_error
     docs = []
@@ -748,6 +757,8 @@ class TestCollection < Test::Unit::TestCase
   end
 
   if @@version > "1.1.1"
+=begin
+map reduce is unimplemented in tokudb:
     def test_map_reduce
       @@test << { "user_id" => 1 }
       @@test << { "user_id" => 2 }
@@ -848,6 +859,7 @@ class TestCollection < Test::Unit::TestCase
         assert res.find.to_a.any? {|doc| doc["_id"] == 2 && doc["value"] == 1}
       end
     end
+=end
   end
 
   if @@version > "1.3.0"
@@ -1077,6 +1089,8 @@ end
 
 
   if @@version > '2.0.0'
+=begin
+disklocs don't exist in tokudb:
     def test_show_disk_loc
       @@test.save({:a => 1})
       @@test.save({:a => 2})
@@ -1084,6 +1098,7 @@ end
       assert @@test.find({:a => 1}, :show_disk_loc => true).next['$diskLoc']
       @@test.remove
     end
+=end
 
     def test_max_scan
       1000.times do |n|
@@ -1287,6 +1302,8 @@ end
       assert @collection.index_information['a_1']['unique'] == true
     end
 
+=begin
+drop_dups is disabled in tokudb:
     should "drop duplicates" do
       @collection.insert({:a => 1})
       @collection.insert({:a => 1})
@@ -1310,6 +1327,7 @@ end
       @collection.ensure_index([['a', Mongo::ASCENDING]], :unique => true, :drop_dups => true)
       assert_equal 1, @collection.find({:a => 1}).count
     end
+=end
 
     should "create an index in the background" do
       if @@version > '1.3.1'
@@ -1332,12 +1350,15 @@ end
       end
     end
 
+=begin
+tokudb doesn't have silly restrictions like this
     should "raise an error if index name is greater than 128" do
       assert_raise Mongo::OperationFailure do
         @collection.create_index([['a' * 25, 1], ['b' * 25, 1],
           ['c' * 25, 1], ['d' * 25, 1], ['e' * 25, 1]])
       end
     end
+=end
 
     should "allow for an alternate name to be specified" do
       @collection.create_index([['a' * 25, 1], ['b' * 25, 1],
@@ -1372,6 +1393,8 @@ end
     end
   end
 
+=begin
+capped collections are unimplemented in tokudb:
   context "Capped collections" do
     setup do
       @@db.drop_collection('log')
@@ -1409,4 +1432,6 @@ end
       assert tail.next_document
     end
   end
+=end
+
 end

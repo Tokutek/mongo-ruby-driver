@@ -285,6 +285,8 @@ class DBTest < Test::Unit::TestCase
     end
   end
 
+=begin
+profiling is unimplemented in tokudb:
   context "database profiling" do
     setup do
       @db  = @@client[MONGO_TEST_DB]
@@ -334,4 +336,5 @@ class DBTest < Test::Unit::TestCase
     end
 
   end
+=end
 end
