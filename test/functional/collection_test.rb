@@ -1302,6 +1302,26 @@ disklocs don't exist in tokudb:
       assert @collection.index_information['a_1']['unique'] == true
     end
 
+    should "create an index with zlib compression" do
+      @collection.create_index([['a', Mongo::ASCENDING]], :compression => 'zlib')
+      assert_equal 'zlib', @collection.index_information['a_1']['compression']
+    end
+
+    should "create an index with a different page size" do
+      @collection.create_index([['a', Mongo::ASCENDING]], :pageSize => 8*1024*1024)
+      assert_equal 8*1024*1024, @collection.index_information['a_1']['pageSize']
+    end
+
+    should "create an index with a different read page size" do
+      @collection.create_index([['a', Mongo::ASCENDING]], :readPageSize => 128*1024)
+      assert_equal 128*1024, @collection.index_information['a_1']['readPageSize']
+    end
+
+    should "create a clustering index" do
+      @collection.create_index([['a', Mongo::ASCENDING]], :clustering => true)
+      assert @collection.index_information['a_1']['clustering'] == true
+    end
+
 =begin
 drop_dups is disabled in tokudb:
     should "drop duplicates" do
