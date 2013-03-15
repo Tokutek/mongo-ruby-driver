@@ -528,12 +528,14 @@ module Mongo
     #
     # @core indexes create_index-instance_method
     def create_index(spec, opts={})
-      opts[:dropDups]   = opts[:drop_dups] if opts[:drop_dups]
-      opts[:bucketSize] = opts[:bucket_size] if opts[:bucket_size]
-      field_spec        = parse_index_spec(spec)
-      opts              = opts.dup
-      name              = opts.delete(:name) || generate_index_name(field_spec)
-      name              = name.to_s if name
+      opts[:dropDups]     = opts[:drop_dups] if opts[:drop_dups]
+      opts[:bucketSize]   = opts[:bucket_size] if opts[:bucket_size]
+      opts[:pageSize]     = opts[:page_size] if opts[:page_size]
+      opts[:readPageSize] = opts[:read_page_size] if opts[:read_page_size]
+      field_spec          = parse_index_spec(spec)
+      opts                = opts.dup
+      name                = opts.delete(:name) || generate_index_name(field_spec)
+      name                = name.to_s if name
       generate_indexes(field_spec, name, opts)
       name
     end
@@ -558,6 +560,8 @@ module Mongo
       now               = Time.now.utc.to_i
       opts[:dropDups]   = opts[:drop_dups] if opts[:drop_dups]
       opts[:bucketSize] = opts[:bucket_size] if opts[:bucket_size]
+      opts[:pageSize]     = opts[:page_size] if opts[:page_size]
+      opts[:readPageSize] = opts[:read_page_size] if opts[:read_page_size]
       field_spec        = parse_index_spec(spec)
       name              = opts[:name] || generate_index_name(field_spec)
       name              = name.to_s if name

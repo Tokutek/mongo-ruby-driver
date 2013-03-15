@@ -284,6 +284,8 @@ module Mongo
       # Create a new collection.
       oh = BSON::OrderedHash.new
       oh[:create] = name
+      opts[:pageSize]     = opts[:page_size] if opts[:page_size]
+      opts[:readPageSize] = opts[:read_page_size] if opts[:read_page_size]
       doc = command(oh.merge(opts || {}))
       return Collection.new(name, self, :pk => @pk_factory) if ok?(doc)
       raise MongoDBError, "Error creating collection: #{doc.inspect}"

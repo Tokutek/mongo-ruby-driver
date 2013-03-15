@@ -1317,6 +1317,16 @@ disklocs don't exist in tokudb:
       assert_equal 128*1024, @collection.index_information['a_1']['readPageSize']
     end
 
+    should "create an index with a different page size with ruby-like page_size key" do
+      @collection.create_index([['a', Mongo::ASCENDING]], :page_size => 8*1024*1024)
+      assert_equal 8*1024*1024, @collection.index_information['a_1']['pageSize']
+    end
+
+    should "create an index with a different read page size with ruby-like read_page_size key" do
+      @collection.create_index([['a', Mongo::ASCENDING]], :read_page_size => 128*1024)
+      assert_equal 128*1024, @collection.index_information['a_1']['readPageSize']
+    end
+
     should "create a clustering index" do
       @collection.create_index([['a', Mongo::ASCENDING]], :clustering => true)
       assert @collection.index_information['a_1']['clustering'] == true

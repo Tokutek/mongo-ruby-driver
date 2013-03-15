@@ -311,11 +311,23 @@ class DBAPITest < Test::Unit::TestCase
     @@db.strict = true
 
     begin
+=begin
+capped unimplemented in tokudb:
       coll = @@db.create_collection('foobar', :capped => true, :size => 1024)
       options = coll.options()
       assert_equal 'foobar', options['create']
       assert_equal true, options['capped']
       assert_equal 1024, options['size']
+=end
+      coll = @@db.create_collection('foobar',
+                                    :compression => 'zlib',
+                                    :page_size => 8*1024*1024,
+                                    :read_page_size => 128*1024)
+      options = coll.options()
+      assert_equal 'foobar', options['create']
+      assert_equal 'zlib', options['compression']
+      assert_equal 8*1024*1024, options['pageSize']
+      assert_equal 128*1024, options['readPageSize']
     rescue => ex
       @@db.drop_collection('foobar')
       fail "did not expect exception \"#{ex}\""
