@@ -1087,7 +1087,6 @@ end
     coll.ensure_index([['a', 1]])
   end
 
-
   if @@version > '2.0.0'
 =begin
 disklocs don't exist in tokudb:
@@ -1288,7 +1287,6 @@ disklocs don't exist in tokudb:
     should "create a geoHaystack index" do
       @geo.save({ "_id" => 100, "pos" => { "long" => 126.9, "lat" => 35.2 }, "type" => "restaurant"})
       @geo.create_index([['pos', Mongo::GEOHAYSTACK], ['type', Mongo::ASCENDING]], :bucket_size => 1)
-      puts @geo.index_information['loc_geoHaystack_type_1']
     end
 
     should "create a geo 2dsphere index" do

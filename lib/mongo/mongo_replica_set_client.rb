@@ -105,8 +105,7 @@ module Mongo
           warn "Please specify hosts as an array of 'host:port' strings; the old format will be removed in v2.0"
           node
         elsif node.is_a?(String)
-          host, port = node.split(":")
-          [ host, port.to_i ]
+          Support.normalize_seeds(node)
         else
           raise MongoArgumentError "Bad seed format!"
         end
@@ -138,14 +137,9 @@ module Mongo
       # Lock for request ids.
       @id_lock = Mutex.new
 
-      @pool_mutex = Mutex.new
       @connected = false
 
-      @safe_mutex_lock = Mutex.new
-      @safe_mutexes = Hash.new {|hash, key| hash[key] = Mutex.new}
-
       @connect_mutex = Mutex.new
-      @refresh_mutex = Mutex.new
 
       @mongos = false
 
@@ -163,7 +157,8 @@ module Mongo
     end
 
     # Initiate a connection to the replica set.
-    def connect
+    def connect(force = !connected?)
+      return unless force
       log(:info, "Connecting...")
 
       # Prevent recursive connection attempts from the same thread.
@@ -171,15 +166,18 @@ module Mongo
       # infinitely while attempting to connect and continually failing. Instead, fail fast.
       raise ConnectionFailure, "Failed to get node data." if thread_local[:locks][:connecting] == true
 
+      current_version = @refresh_version
       @connect_mutex.synchronize do
-        return if @connected
+        # don't try to connect if another thread has done so while we were waiting for the lock
+        return unless current_version == @refresh_version
         begin
           thread_local[:locks][:connecting] = true
           if @manager
-            @manager.refresh! @seeds
+            ensure_manager
+            @manager.refresh!(@seeds)
           else
             @manager = PoolManager.new(self, @seeds)
-            thread_local[:managers][self] = @manager
+            ensure_manager
             @manager.connect
           end
         ensure
@@ -211,6 +209,7 @@ module Mongo
       end
 
       log(:debug, "Checking replica set connection health...")
+      ensure_manager
       @manager.check_connection_health
 
       if @manager.refresh_required?
@@ -228,9 +227,7 @@ module Mongo
     #   to get the refresh lock.
     def hard_refresh!
       log(:info, "Initiating hard refresh...")
-      @manager.refresh! @seeds
-
-      @refresh_version += 1
+      connect(true)
       return true
     end
 
@@ -421,6 +418,10 @@ module Mongo
       local_manager ? local_manager.secondary_pools : []
     end
 
+    def pools
+      local_manager ? local_manager.pools : []
+    end
+
     def tag_map
       local_manager ? local_manager.tag_map : {}
     end
@@ -432,7 +433,7 @@ module Mongo
 
     def max_message_size
       return local_manager.max_message_size if local_manager
-      DEFAULT_MAX_MESSAGE_SIZE
+      max_bson_size * MESSAGE_SIZE_FACTOR
     end
 
     private
@@ -476,16 +477,8 @@ module Mongo
     def sync_refresh
       if @refresh_mode == :sync &&
         ((Time.now - @last_refresh) > @refresh_interval)
-
         @last_refresh = Time.now
-
-        if @refresh_mutex.try_lock
-          begin
-            refresh
-          ensure
-            @refresh_mutex.unlock
-          end
-        end
+        refresh
       end
     end
   end

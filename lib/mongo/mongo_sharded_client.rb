@@ -25,8 +25,7 @@ module Mongo
       end
 
       @seeds = nodes.map do |host_port|
-        host, port = host_port.split(":")
-        [ host, port.to_i ]
+        Support.normalize_seeds(host_port)
       end
 
       # TODO: add a method for replacing this list of node.
@@ -42,14 +41,9 @@ module Mongo
       # Lock for request ids.
       @id_lock = Mutex.new
 
-      @pool_mutex = Mutex.new
       @connected = false
 
-      @safe_mutex_lock = Mutex.new
-      @safe_mutexes = Hash.new {|hash, key| hash[key] = Mutex.new}
-
       @connect_mutex = Mutex.new
-      @refresh_mutex = Mutex.new
 
       @mongos        = true
 
@@ -67,7 +61,7 @@ module Mongo
     end
 
     # Initiate a connection to the sharded cluster.
-    def connect(force = !@connected)
+    def connect(force = !connected?)
       return unless force
       log(:info, "Connecting...")
 
@@ -80,10 +74,11 @@ module Mongo
         begin
           thread_local[:locks][:connecting] = true
           if @manager
+            thread_local[:managers][self] = @manager
             @manager.refresh! @seeds
           else
             @manager = ShardingPoolManager.new(self, @seeds)
-            thread_local[:managers][self] = @manager
+            ensure_manager
             @manager.connect
           end
         ensure
@@ -109,7 +104,7 @@ module Mongo
     end
 
     def connected?
-      @connected && @manager.primary_pool
+      !!(@connected && @manager.primary_pool)
     end
 
     # Returns +true+ if it's okay to read from a secondary node.
@@ -141,7 +136,8 @@ module Mongo
     # @param opts [ Hash ] Any of the options available for MongoShardedClient.new
     #
     # @return [ Mongo::MongoShardedClient ] The sharded client.
-    def self.from_uri(uri = ENV['MONGODB_URI'], options = {})
+    def self.from_uri(uri, options = {})
+      uri ||= ENV['MONGODB_URI']
       URIParser.new(uri).connection(options, false, true)
     end
   end

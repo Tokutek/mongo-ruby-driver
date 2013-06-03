@@ -12,27 +12,43 @@ module Mongo
     end
 
     def connect
-      @refresh_required = false
-      disconnect_old_members
-      connect_to_members
-      initialize_pools best(@members)
-    end
-
-    # We want to refresh to the member with the fastest ping time
-    # but also want to minimize refreshes
-    # We're healthy if the primary is pingable. If this isn't the case,
-    # or the members have changed, set @refresh_required to true, and return.
-    # The config.mongos find can't be part of the connect call chain due to infinite recursion
-    def check_connection_health
-      begin
-        seeds = @client['config']['mongos'].find.to_a.map{|doc| doc['_id']}
-        if @seeds != seeds
-          @seeds = seeds
-          @refresh_required = true
+      @connect_mutex.synchronize do
+        begin
+          thread_local[:locks][:connecting_manager] = true
+          @refresh_required = false
+          disconnect_old_members
+          connect_to_members
+          initialize_pools best(@members)
+          update_max_sizes
+          @seeds = discovered_seeds
+        ensure
+          thread_local[:locks][:connecting_manager] = false
         end
-      rescue Mongo::OperationFailure
-        @refresh_required = true
       end
     end
+
+    # Checks that each node is healthy (via check_is_master) and that each
+    # node is in fact a mongos. If either criteria are not true, a refresh is
+    # set to be triggered and close() is called on the node.
+    #
+    # @return [Boolean] indicating if a refresh is required.
+    def check_connection_health
+      @refresh_required = false
+      @members.each do |member|
+        begin
+          config = @client.check_is_master([member.host, member.port])
+          unless config && config.has_key?('msg')
+            @refresh_required = true
+            member.close
+          end
+        rescue OperationTimeout
+          @refresh_required = true
+          member.close
+        end
+        break if @refresh_required
+      end
+      @refresh_required
+    end
+
   end
 end

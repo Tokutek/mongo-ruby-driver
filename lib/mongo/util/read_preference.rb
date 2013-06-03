@@ -9,11 +9,11 @@ module Mongo
     ]
 
     MONGOS_MODES = {
-      :primary              => :primary,
-      :primary_preferred    => :primaryPreferred,
-      :secondary            => :secondary,
-      :secondary_preferred  => :secondaryPreferred,
-      :nearest              => :nearest
+      :primary              => 'primary',
+      :primary_preferred    => 'primaryPreferred',
+      :secondary            => 'secondary',
+      :secondary_preferred  => 'secondaryPreferred',
+      :nearest              => 'nearest'
     }
 
     def self.mongos(mode, tag_sets)
@@ -77,7 +77,7 @@ module Mongo
         when :secondary_preferred
           select_secondary_pool(secondary_pools, read_pref) || primary_pool
         when :nearest
-          select_secondary_pool(pools, read_pref)
+          select_near_pool(pools, read_pref)
       end
     end
 

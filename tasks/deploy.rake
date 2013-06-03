@@ -40,23 +40,15 @@ namespace :deploy do
     g.commit "RELEASE #{bumper_version}"
     g.add_tag("#{bumper_version}")
     g.push('origin', 'master', true)
-
-    g.checkout('release')
-    g.pull('origin', 'master')
-    g.push('origin', 'release', true)
   end
 
-  desc "Package all gems for release (Run from MRI)"
+  desc "Package all gems for release"
   task :package do
-    RVM.use 'jruby'
-    system "gem build bson.gemspec"
-
-    RVM.reset_current!
     Dir.glob('*.gemspec').each { |file| system "gem build #{file}" }
   end
 
   desc "Release all the things!"
-  task :release => [:version, :git, :package] do
+  task :release do
     Dir.glob('*.gem').each { |file| system "gem push #{file}" }
     Rake::Task['deploy:cleanup'].invoke
   end

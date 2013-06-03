@@ -8,7 +8,6 @@ gem 'activesupport'
 group :deploy do
   gem 'git'
   gem 'yard'
-  gem 'rvm'
   gem 'version_bumper'
   gem 'redcarpet' unless RUBY_PLATFORM =~ /java/
 end
@@ -17,15 +16,18 @@ group :testing do
   gem 'test-unit'
   gem 'mocha', ">=0.13.0", :require => 'mocha/setup'
   gem 'shoulda', ">=3.3.2"
-  gem 'rspec'
+  gem 'shoulda-matchers', '~>1.0'
 
   gem 'sfl'
   gem 'simplecov', :require => false
 end
 
+group :development do
+  gem 'pry-rescue'
+  gem 'pry-nav'
+end
+
 platforms :jruby do
-  gem 'bouncy-castle-java'
-  gem 'jruby-openssl'
   gem 'jruby-launcher'
   gem 'jruby-jars'
 end

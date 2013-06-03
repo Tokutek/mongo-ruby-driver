@@ -8,9 +8,14 @@ Gem::Specification.new do |s|
   s.summary           = 'Ruby implementation of BSON'
   s.description       = 'A Ruby BSON implementation for MongoDB. For more information about Mongo, see http://www.mongodb.org. For more information on BSON, see http://www.bsonspec.org.'
   s.rubyforge_project = 'bson'
+  s.license           = 'Apache License Version 2.0'
 
-  s.signing_key       = 'gem-private_key.pem'
-  s.cert_chain        = ['gem-public_cert.pem']
+  if File.exists?('gem-private_key.pem')
+    s.signing_key = 'gem-private_key.pem'
+    s.cert_chain  = ['gem-public_cert.pem']
+  else
+    warn 'Warning: No private key present, creating unsigned gem.'
+  end
 
   s.files             = ['bson.gemspec', 'LICENSE', 'VERSION']
   s.files             += ['bin/b2json', 'bin/j2bson', 'lib/bson.rb']
@@ -23,7 +28,6 @@ Gem::Specification.new do |s|
     s.platform = Gem::Platform::RUBY
   end
 
-  s.test_files        = Dir['test/bson/*.rb']
   s.executables       = ['b2json', 'j2bson']
   s.require_paths     = ['lib']
   s.has_rdoc          = 'yard'

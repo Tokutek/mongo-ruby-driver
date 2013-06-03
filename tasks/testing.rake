@@ -1,5 +1,4 @@
 # -*- mode: ruby; -*-
-require 'rspec/core/rake_task'
 
 desc "Run the default test suite (Ruby)"
 task :test => ENV.key?('TRAVIS_TEST') ? 'test:default' : 'test:ruby'
@@ -26,8 +25,6 @@ end
 namespace :test do
   DEFAULT_TESTS = ['functional', 'unit', 'bson', 'threading']
   ENV['TEST_MODE'] = 'TRUE'
-
-  RSpec::Core::RakeTask.new(:spec)
 
   desc "Run default test suites with BSON extensions enabled."
   task :ext do
@@ -70,11 +67,13 @@ namespace :test do
   end
 
   Rake::TestTask.new(:replica_set) do |t|
-    t.test_files = FileList['test/replica_set/*_test.rb'] - [
+    disabled = [
       'test/replica_set/complex_connect_test.rb',
       'test/replica_set/count_test.rb',
       'test/replica_set/read_preference_test.rb'
     ]
+
+    t.test_files = FileList['test/replica_set/*_test.rb'] - disabled
     t.libs << 'test'
     #t.verbose = true
     #t.options = '-v'

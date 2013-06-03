@@ -9,10 +9,10 @@ module Mongo
                 :primary_pool,
                 :secondary_pools,
                 :hosts,
-                :nodes,
-                :members,
                 :seeds,
-                :pools
+                :pools,
+                :max_bson_size,
+                :max_message_size
 
     # Create a new set of connection pools.
     #
@@ -22,17 +22,21 @@ module Mongo
     # time. The union of these lists will be used when attempting to connect,
     # with the newly-discovered nodes being used first.
     def initialize(client, seeds=[])
-      @client               = client
-      @seeds                = seeds
+      @client                                   = client
+      @seeds                                    = seeds
 
-      @pools                = Set.new
-      @primary              = nil
-      @primary_pool         = nil
-      @secondaries          = Set.new
-      @secondary_pools      = []
-      @hosts                = Set.new
-      @members              = Set.new
-      @refresh_required     = false
+      @pools                                    = Set.new
+      @primary                                  = nil
+      @primary_pool                             = nil
+      @secondaries                              = Set.new
+      @secondary_pools                          = []
+      @hosts                                    = Set.new
+      @members                                  = Set.new
+      @refresh_required                         = false
+      @max_bson_size                            = DEFAULT_MAX_BSON_SIZE
+      @max_message_size                         = @max_bson_size * MESSAGE_SIZE_FACTOR
+      @connect_mutex                            = Mutex.new
+      thread_local[:locks][:connecting_manager] = false
     end
 
     def inspect
@@ -40,11 +44,19 @@ module Mongo
     end
 
     def connect
-      @refresh_required = false
-      disconnect_old_members
-      connect_to_members
-      initialize_pools(@members)
-      cache_discovered_seeds
+      @connect_mutex.synchronize do
+        begin
+          thread_local[:locks][:connecting_manager] = true
+          @refresh_required = false
+          disconnect_old_members
+          connect_to_members
+          initialize_pools(@members)
+          update_max_sizes
+          @seeds = discovered_seeds
+        ensure
+          thread_local[:locks][:connecting_manager] = false
+        end
+      end
     end
 
     def refresh!(additional_seeds)
@@ -57,6 +69,8 @@ module Mongo
     # to our view. If any of these isn't the case,
     # set @refresh_required to true, and return.
     def check_connection_health
+      return if thread_local[:locks][:connecting_manager]
+      members = copy_members
       begin
         seed = get_valid_seed_node
       rescue ConnectionFailure
@@ -70,14 +84,14 @@ module Mongo
         return
       end
 
-      if current_config['hosts'].length != @members.length
+      if current_config['hosts'].length != members.length
         @refresh_required = true
         seed.close
         return
       end
 
       current_config['hosts'].each do |host|
-        member = @members.detect do |m|
+        member = members.detect do |m|
           m.address == host
         end
 
@@ -86,7 +100,7 @@ module Mongo
         else
           @refresh_required = true
           seed.close
-          return false
+          return
         end
       end
 
@@ -113,15 +127,14 @@ module Mongo
       read_pool.host_port
     end
 
-    def max_bson_size
-      @max_bson_size ||= config_min('maxBsonObjectSize', DEFAULT_MAX_BSON_SIZE)
-    end
-
-    def max_message_size
-      @max_message_size ||= config_min('maxMessageSizeBytes', DEFAULT_MAX_MESSAGE_SIZE)
-    end
-
     private
+
+    def update_max_sizes
+      unless @members.size == 0
+        @max_bson_size = @members.map(&:max_bson_size).min
+        @max_message_size = @members.map(&:max_message_size).min
+      end
+    end
 
     def validate_existing_member(current_config, member)
       if current_config['ismaster'] && member.last_state != :primary
@@ -149,13 +162,13 @@ module Mongo
             existing.set_config
             # If we are unhealthy after refreshing our config, drop from the set.
             if !existing.healthy?
-              @members.delete existing
+              @members.delete(existing)
             else
               next
             end
           else
             existing.close
-            @members.delete existing
+            @members.delete(existing)
           end
         end
 
@@ -190,11 +203,6 @@ module Mongo
       end
 
       @arbiters = members.first.arbiters
-    end
-
-    def config_min(attribute, default)
-      @members.reject {|m| !m.config[attribute]}
-      @members.map {|m| m.config[attribute]}.min || default
     end
 
     def assign_primary(member)
@@ -244,11 +252,19 @@ module Mongo
         "#{@seeds.map {|s| "#{s[0]}:#{s[1]}" }.join(', ')}"
     end
 
-    private
-
-    def cache_discovered_seeds
-      @seeds = @members.map &:host_port
+    def discovered_seeds
+      @members.map(&:host_port)
     end
+
+    def copy_members
+       members = Set.new
+       @connect_mutex.synchronize do
+         @members.map do |m|
+           members << m.dup
+         end
+       end
+       members
+     end
 
   end
 end

@@ -5,7 +5,8 @@ module Mongo
 
     def initialize(client, host_port)
       @client = client
-      @host, @port = split_node(host_port)
+      @manager = @client.local_manager
+      @host, @port = Support.normalize_seeds(host_port)
       @address = "#{@host}:#{@port}"
       @config = nil
       @socket = nil
@@ -19,7 +20,7 @@ module Mongo
 
     def =~(other)
       if other.is_a?(String)
-        h, p = split_node(other)
+        h, p = Support.normalize_seeds(other)
         h == @host && p == @port
       else
         false
@@ -89,6 +90,7 @@ module Mongo
           end
 
           @config = @client['admin'].command({:ismaster => 1}, :socket => @socket)
+          update_max_sizes
 
           if @config['msg']
             @client.log(:warn, "#{config['msg']}")
@@ -119,9 +121,8 @@ module Mongo
 
     def arbiters
       return [] unless config['arbiters']
-
       config['arbiters'].map do |arbiter|
-        split_node(arbiter)
+        Support.normalize_seeds(arbiter)
       end
     end
 
@@ -149,18 +150,15 @@ module Mongo
       connected? && config
     end
 
-    protected
-
-    def split_node(host_port)
-      if host_port.is_a?(String)
-        host_port = host_port.split(":")
-      end
-
-      host = host_port[0]
-      port = host_port[1].nil? ? MongoClient::DEFAULT_PORT : host_port[1].to_i
-
-      [host, port]
+    def max_bson_size
+      @max_bson_size || DEFAULT_MAX_BSON_SIZE
     end
+
+    def max_message_size
+      @max_message_size || max_bson_size * MESSAGE_SIZE_FACTOR
+    end
+
+    protected
 
     # Ensure that this node is a healthy member of a replica set.
     def check_set_membership(config)
@@ -187,6 +185,13 @@ module Mongo
           raise ReplicaSetConnectionError, message
         end
       end
+    end
+
+    private
+
+    def update_max_sizes
+      @max_bson_size = config['maxBsonObjectSize'] || DEFAULT_MAX_BSON_SIZE
+      @max_message_size = config['maxMessageSizeBytes'] || @max_bson_size * MESSAGE_SIZE_FACTOR
     end
   end
 end

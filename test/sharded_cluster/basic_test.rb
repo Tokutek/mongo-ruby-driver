@@ -36,7 +36,7 @@ class BasicTest < Test::Unit::TestCase
     @client = MongoClient.new(host, port, {:read => :secondary, :tag_sets => tags})
     assert @client.connected?
     cursor = Cursor.new(@client[MONGO_TEST_DB]['whatever'], {})
-    assert_equal cursor.construct_query_spec['$readPreference'], {:mode => :secondary, :tags => tags}
+    assert_equal cursor.construct_query_spec['$readPreference'], {:mode => 'secondary', :tags => tags}
   end
 
   def test_find_one_with_read_secondary
@@ -68,7 +68,7 @@ class BasicTest < Test::Unit::TestCase
     @client = MongoShardedClient.new(@seeds, {:read => :secondary, :tag_sets => tags})
     assert @client.connected?
     cursor = Cursor.new(@client[MONGO_TEST_DB]['whatever'], {})
-    assert_equal cursor.construct_query_spec['$readPreference'], {:mode => :secondary, :tags => tags}
+    assert_equal cursor.construct_query_spec['$readPreference'], {:mode => 'secondary', :tags => tags}
   end
 
   def test_hard_refresh
@@ -85,6 +85,24 @@ class BasicTest < Test::Unit::TestCase
     router = @sc.servers(:routers).first
     router.stop
     probe(@seeds.size)
+    assert @client.connected?
+    @client.close
+  end
+
+  def test_mongos_failover
+    @client = MongoShardedClient.new(@seeds, :refresh_interval => 5, :refresh_mode => :sync)
+    assert @client.connected?
+    # do a find to pin a pool
+    @client['MONGO_TEST_DB']['test'].find_one
+    original_primary = @client.manager.primary
+    # stop the pinned member
+    @sc.member_by_name("#{original_primary[0]}:#{original_primary[1]}").stop
+    # assert that the client fails over to the next available mongos
+    assert_nothing_raised do
+      @client['MONGO_TEST_DB']['test'].find_one
+    end
+
+    assert_not_equal original_primary, @client.manager.primary
     assert @client.connected?
     @client.close
   end
