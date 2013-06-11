@@ -53,7 +53,7 @@ class CursorTest < Test::Unit::TestCase
   def test_exhaust
     # Replica sets can't handle removing lots of large documents, the
     # existence of this test causes lots of other tests to fail.
-    unless @@connection.respond_to? 'secondaries' and @@connection.secondaries.length > 0
+    unless @@db.command('ismaster' => 1).has_key? 'hosts'
       if @@version >= "2.0"
         @@coll.remove
         data = "1" * 10_000

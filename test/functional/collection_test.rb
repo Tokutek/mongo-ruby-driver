@@ -991,7 +991,7 @@ end
   def test_large_limit
     # Replica sets can't handle removing lots of large documents, the
     # existence of this test causes lots of other tests to fail.
-    unless @@client.respond_to? 'secondaries' and @@client.secondaries.length > 0
+    unless @@db.command('ismaster' => 1).has_key? 'hosts'
       2000.times do |i|
         @@test.insert("x" => i, "y" => "mongomongo" * 1000)
       end
