@@ -51,33 +51,29 @@ class CursorTest < Test::Unit::TestCase
   end
 
   def test_exhaust
-    # Replica sets can't handle removing lots of large documents, the
-    # existence of this test causes lots of other tests to fail.
-    unless @@db.command('ismaster' => 1).has_key? 'hosts'
-      if @@version >= "2.0"
-        @@coll.remove
-        data = "1" * 10_000
-        5000.times do |n|
-          @@coll.insert({:n => n, :data => data})
-        end
-
-        c = Cursor.new(@@coll)
-        c.add_option(OP_QUERY_EXHAUST)
-        assert_equal @@coll.count, c.to_a.size
-        assert c.closed?
-
-        c = Cursor.new(@@coll)
-        c.add_option(OP_QUERY_EXHAUST)
-        4999.times do
-          c.next
-        end
-        assert c.has_next?
-        assert c.next
-        assert !c.has_next?
-        assert c.closed?
-
-        @@coll.remove
+    if @@version >= "2.0"
+      @@coll.remove
+      data = "1" * 10_000
+      5000.times do |n|
+        @@coll.insert({:n => n, :data => data})
       end
+
+      c = Cursor.new(@@coll)
+      c.add_option(OP_QUERY_EXHAUST)
+      assert_equal @@coll.count, c.to_a.size
+      assert c.closed?
+
+      c = Cursor.new(@@coll)
+      c.add_option(OP_QUERY_EXHAUST)
+      4999.times do
+        c.next
+      end
+      assert c.has_next?
+      assert c.next
+      assert !c.has_next?
+      assert c.closed?
+
+      @@coll.remove
     end
   end
 

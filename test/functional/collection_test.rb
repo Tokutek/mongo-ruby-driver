@@ -989,25 +989,21 @@ end
   end
 
   def test_large_limit
-    # Replica sets can't handle removing lots of large documents, the
-    # existence of this test causes lots of other tests to fail.
-    unless @@db.command('ismaster' => 1).has_key? 'hosts'
-      2000.times do |i|
-        @@test.insert("x" => i, "y" => "mongomongo" * 1000)
-      end
-
-      assert_equal 2000, @@test.count
-
-      i = 0
-      y = 0
-      @@test.find({}, :limit => 1900).each do |doc|
-        i += 1
-        y += doc["x"]
-      end
-
-      assert_equal 1900, i
-      assert_equal 1804050, y
+    2000.times do |i|
+      @@test.insert("x" => i, "y" => "mongomongo" * 1000)
     end
+
+    assert_equal 2000, @@test.count
+
+    i = 0
+    y = 0
+    @@test.find({}, :limit => 1900).each do |doc|
+      i += 1
+      y += doc["x"]
+    end
+
+    assert_equal 1900, i
+    assert_equal 1804050, y
   end
 
   def test_small_limit
