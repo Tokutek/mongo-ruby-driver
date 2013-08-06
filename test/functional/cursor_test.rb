@@ -34,7 +34,7 @@ class CursorTest < Test::Unit::TestCase
 
   def test_add_and_remove_options
     # OP_QUERY_EXHAUST doesn't work over a sharded connection because of SERVER-2627
-    if @@connection.db('config').collection('version').count == 0
+    unless @@connection.mongos?
       c = @@coll.find
       assert_equal 0, c.options & OP_QUERY_EXHAUST
       c.add_option(OP_QUERY_EXHAUST)
@@ -55,7 +55,7 @@ class CursorTest < Test::Unit::TestCase
 
   def test_exhaust
     # OP_QUERY_EXHAUST doesn't work over a sharded connection because of SERVER-2627
-    if @@connection.db('config').collection('version').count == 0
+    unless @@connection.mongos?
       if @@version >= "2.0"
         @@coll.remove
         data = "1" * 10_000
