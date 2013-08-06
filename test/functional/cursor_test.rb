@@ -33,47 +33,53 @@ class CursorTest < Test::Unit::TestCase
   end
 
   def test_add_and_remove_options
-    c = @@coll.find
-    assert_equal 0, c.options & OP_QUERY_EXHAUST
-    c.add_option(OP_QUERY_EXHAUST)
-    assert_equal OP_QUERY_EXHAUST, c.options & OP_QUERY_EXHAUST
-    c.remove_option(OP_QUERY_EXHAUST)
-    assert_equal 0, c.options & OP_QUERY_EXHAUST
-
-    c.next
-    assert_raise Mongo::InvalidOperation do
+    # OP_QUERY_EXHAUST doesn't work over a sharded connection because of SERVER-2627
+    if @@connection.db('config').collection('version').count == 0
+      c = @@coll.find
+      assert_equal 0, c.options & OP_QUERY_EXHAUST
       c.add_option(OP_QUERY_EXHAUST)
-    end
+      assert_equal OP_QUERY_EXHAUST, c.options & OP_QUERY_EXHAUST
+      c.remove_option(OP_QUERY_EXHAUST)
+      assert_equal 0, c.options & OP_QUERY_EXHAUST
 
-    assert_raise Mongo::InvalidOperation do
-      c.add_option(OP_QUERY_EXHAUST)
+      c.next
+      assert_raise Mongo::InvalidOperation do
+        c.add_option(OP_QUERY_EXHAUST)
+      end
+
+      assert_raise Mongo::InvalidOperation do
+        c.add_option(OP_QUERY_EXHAUST)
+      end
     end
   end
 
   def test_exhaust
-    if @@version >= "2.0"
-      @@coll.remove
-      data = "1" * 10_000
-      5000.times do |n|
-        @@coll.insert({:n => n, :data => data})
+    # OP_QUERY_EXHAUST doesn't work over a sharded connection because of SERVER-2627
+    if @@connection.db('config').collection('version').count == 0
+      if @@version >= "2.0"
+        @@coll.remove
+        data = "1" * 10_000
+        5000.times do |n|
+          @@coll.insert({:n => n, :data => data})
+        end
+
+        c = Cursor.new(@@coll)
+        c.add_option(OP_QUERY_EXHAUST)
+        assert_equal @@coll.count, c.to_a.size
+        assert c.closed?
+
+        c = Cursor.new(@@coll)
+        c.add_option(OP_QUERY_EXHAUST)
+        4999.times do
+          c.next
+        end
+        assert c.has_next?
+        assert c.next
+        assert !c.has_next?
+        assert c.closed?
+
+        @@coll.remove
       end
-
-      c = Cursor.new(@@coll)
-      c.add_option(OP_QUERY_EXHAUST)
-      assert_equal @@coll.count, c.to_a.size
-      assert c.closed?
-
-      c = Cursor.new(@@coll)
-      c.add_option(OP_QUERY_EXHAUST)
-      4999.times do
-        c.next
-      end
-      assert c.has_next?
-      assert c.next
-      assert !c.has_next?
-      assert c.closed?
-
-      @@coll.remove
     end
   end
 
