@@ -230,9 +230,15 @@ class DBTest < Test::Unit::TestCase
   if @@version >= "1.3.5"
     def test_db_stats
       stats = @@db.stats
-      puts stats.to_s unless stats.has_key?('collections')
-      assert stats.has_key?('collections')
-      assert stats.has_key?('dataSize')
+      if @@client.mongos?
+        stats['raw'].each_value do |raw_stats|
+          assert raw_stats.has_key?('collections')
+          assert raw_stats.has_key?('dataSize')
+        end
+      else
+        assert stats.has_key?('collections')
+        assert stats.has_key?('dataSize')
+      end
     end
   end
 
