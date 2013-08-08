@@ -136,38 +136,43 @@ class DBTest < Test::Unit::TestCase
       @@db.command({:non_command => 1}, :check_response => true)
     end
 
-    result = @@db.command({:non_command => 1}, :check_response => false)
-    assert !Mongo::Support.ok?(result)
+    # mongos catches this error early, doesn't let you ignore the error
+    unless @@client.mongos?
+      result = @@db.command({:non_command => 1}, :check_response => false)
+      assert !Mongo::Support.ok?(result)
+    end
   end
 
   def test_error
     @@db.reset_error_history
     assert_nil @@db.get_last_error['err']
     assert !@@db.error?
-    assert_nil @@db.previous_error
+    assert_nil @@db.previous_error unless @@client.mongos?  # getPrevError doesn't work on mongos
 
     @@db.command({:forceerror => 1}, :check_response => false)
     assert @@db.error?
     assert_not_nil @@db.get_last_error['err']
-    assert_not_nil @@db.previous_error
+    assert_not_nil @@db.previous_error unless @@client.mongos?  # getPrevError doesn't work on mongos
 
     @@db.command({:forceerror => 1}, :check_response => false)
     assert @@db.error?
     assert @@db.get_last_error['err']
-    prev_error = @@db.previous_error
-    assert_equal 1, prev_error['nPrev']
-    assert_equal prev_error["err"], @@db.get_last_error['err']
+    unless @@client.mongos?  # getPrevError doesn't work on mongos
+      prev_error = @@db.previous_error
+      assert_equal 1, prev_error['nPrev']
+      assert_equal prev_error["err"], @@db.get_last_error['err']
+    end
 
     @@db.collection('test').find_one
     assert_nil @@db.get_last_error['err']
     assert !@@db.error?
-    assert @@db.previous_error
-    assert_equal 2, @@db.previous_error['nPrev']
+    assert @@db.previous_error unless @@client.mongos?  # getPrevError doesn't work on mongos
+    assert_equal 2, @@db.previous_error['nPrev'] unless @@client.mongos?  # getPrevError doesn't work on mongos
 
     @@db.reset_error_history
     assert_nil @@db.get_last_error['err']
     assert !@@db.error?
-    assert_nil @@db.previous_error
+    assert_nil @@db.previous_error unless @@client.mongos?  # getPrevError doesn't work on mongos
   end
 
   def test_check_command_response

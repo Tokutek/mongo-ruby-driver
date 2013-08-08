@@ -390,6 +390,11 @@ class CursorTest < Test::Unit::TestCase
   end
 
   def test_kill_cursors
+    # mongos returns a differently formatted cursorInfo
+    if @@client.mongos?
+      return
+    end
+
     @@coll.drop
 
     client_cursors = @@db.command("cursorInfo" => 1)["clientCursors_size"]
@@ -477,6 +482,12 @@ class CursorTest < Test::Unit::TestCase
   end
 
   def test_cursor_invalid
+    # mongos names the error differently than CURSOR_NOT_FOUND, this is
+    # not a big deal to skip
+    if @@client.mongos?
+      return
+    end
+
     @@coll.remove
     10000.times do |n|
       @@coll.insert({:a => n})

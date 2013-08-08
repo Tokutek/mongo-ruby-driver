@@ -4,6 +4,11 @@ class TestTimeout < Test::Unit::TestCase
   def test_op_timeout
     connection = standard_connection(:op_timeout => 1)
 
+    # db.eval() is unsupported over mongos
+    if connection.mongos?
+      return
+    end
+
     admin = connection.db('admin')
 
     command = {:eval => "sleep(500)"}
@@ -19,6 +24,12 @@ class TestTimeout < Test::Unit::TestCase
 
   def test_external_timeout_does_not_leave_socket_in_bad_state
     client = Mongo::MongoClient.new
+
+    # db.eval() is unsupported over mongos
+    if client.mongos?
+      return
+    end
+
     db = client[MONGO_TEST_DB]
     coll = db['timeout-tests']
 

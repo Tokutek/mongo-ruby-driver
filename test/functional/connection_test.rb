@@ -151,6 +151,12 @@ class TestConnection < Test::Unit::TestCase
   end
 
   def test_copy_database
+    # if host_port is a mongos, we can't copydb from it because mongod
+    # will try to run a multi-statement transaction
+    if @client.mongos?
+      return
+    end
+
     @client.db('old').collection('copy-test').insert('a' => 1)
     @client.copy_database('old', 'new', host_port)
     old_object = @client.db('old').collection('copy-test').find.next_document
@@ -161,6 +167,12 @@ class TestConnection < Test::Unit::TestCase
   end
 
   def test_copy_database_with_auth
+    # if host_port is a mongos, we can't copydb from it because mongod
+    # will try to run a multi-statement transaction
+    if @client.mongos?
+      return
+    end
+
     @client.db('old').collection('copy-test').insert('a' => 1)
     @client.db('old').add_user('bob', 'secret')
 
@@ -237,6 +249,11 @@ class TestConnection < Test::Unit::TestCase
   end
 
   def test_fsync_lock
+    # fsync_lock unsupported on mongos
+    if @client.mongos?
+      return
+    end
+
     assert !@client.locked?
     @client.lock!
     assert @client.locked?
