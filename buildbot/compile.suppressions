@@ -1,0 +1,2 @@
+cbson.c : warning: implicit declaration of function ‘htonl’
+cbson.c : warning: implicit declaration of function ‘htons’
