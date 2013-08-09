@@ -31,6 +31,8 @@ module AuthenticationTests
   end
 
   def test_authenticate
+    # authentication tests are flaky with auth, due to Tokutek/mongo#77
+    return if @client.mongos?
     @db.add_user('peggy', 'user')
     assert @db.authenticate('peggy', 'user')
     @db.remove_user('peggy')
@@ -44,6 +46,8 @@ module AuthenticationTests
   end
 
   def test_logout
+    # authentication tests are flaky with auth, due to Tokutek/mongo#77
+    return if @client.mongos?
     @db.add_user('peggy', 'user')
     assert @db.authenticate('peggy', 'user')
     assert @db.logout
@@ -51,6 +55,8 @@ module AuthenticationTests
   end
 
   def test_authenticate_with_special_characters
+    # authentication tests are flaky with auth, due to Tokutek/mongo#77
+    return if @client.mongos?
     assert @db.add_user('foo:bar','@foo')
     assert @db.authenticate('foo:bar','@foo')
     @db.remove_user('foo:bar')
@@ -58,6 +64,8 @@ module AuthenticationTests
   end
 
   def test_authenticate_read_only
+    # authentication tests are flaky with auth, due to Tokutek/mongo#77
+    return if @client.mongos?
     @db.add_user('randy', 'readonly', true)
     assert @db.authenticate('randy', 'readonly')
     @db.remove_user('randy')
