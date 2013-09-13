@@ -1,9 +1,24 @@
+# Copyright (C) 2013 10gen Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 require 'cgi'
+require 'uri'
 
 module Mongo
   class URIParser
 
-    USER_REGEX = /([-.\w:]+)/
+    USER_REGEX = /(.+)/
     PASS_REGEX = /([^@,]+)/
     AUTH_REGEX = /(#{USER_REGEX}:#{PASS_REGEX}@)?/
 
@@ -94,7 +109,7 @@ module Mongo
       :w                => lambda { |arg| Mongo::Support.is_i?(arg) ? arg.to_i : arg.to_sym },
       :wtimeout         => lambda { |arg| arg.to_i },
       :wtimeoutms       => lambda { |arg| arg.to_i }
-     }
+    }
 
     attr_reader :auths,
                 :connect,
@@ -225,7 +240,7 @@ module Mongo
       end
 
       if @slaveok && !@readpreference
-        if direct?
+        unless replicaset?
           opts[:slave_ok] = true
         else
           opts[:read] = :secondary_preferred
@@ -233,15 +248,13 @@ module Mongo
       end
 
       opts[:ssl] = @ssl
-
-      if direct?
-        opts[:auths] = auths
-      end
+      opts[:auths] = auths
 
       if replicaset.is_a?(String)
         opts[:name] = replicaset
       end
 
+      opts[:default_db] = @db
       opts[:connect] = connect?
 
       opts
@@ -266,7 +279,7 @@ module Mongo
       uname    = matches[2]
       pwd      = matches[3]
       hosturis = matches[4].split(',')
-      db       = matches[8]
+      @db      = matches[8]
 
       hosturis.each do |hosturi|
         # If port is present, use it, otherwise use default port
@@ -284,15 +297,17 @@ module Mongo
         raise MongoArgumentError, "No nodes specified. Please ensure that you've provided at least one node."
       end
 
-      if uname && pwd && db
-        auths << {:db_name => db, :username => uname, :password => pwd}
+      if uname && pwd && @db
+        auths << {
+          :db_name  => @db,
+          :username => URI.unescape(uname),
+          :password => URI.unescape(pwd)
+        }
       elsif uname || pwd
-        raise MongoArgumentError, "MongoDB URI must include username, password, "
-          "and db if username and password are specified."
+        raise MongoArgumentError, 'MongoDB URI must include username, ' +
+                                  'password, and db if username and ' +
+                                  'password are specified.'
       end
-
-      # The auths are repeated for each host in a replica set
-      @auths *= hosturis.length
     end
 
     # This method uses the lambdas defined in OPT_VALID and OPT_CONV to validate

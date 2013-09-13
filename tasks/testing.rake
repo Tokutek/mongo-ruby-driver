@@ -1,4 +1,16 @@
-# -*- mode: ruby; -*-
+# Copyright (C) 2013 10gen Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 desc "Run the default test suite (Ruby)"
 task :test => ENV.key?('TRAVIS_TEST') ? 'test:default' : 'test:ruby'
@@ -66,24 +78,24 @@ namespace :test do
     end
   end
 
+  Rake::TestTask.new(:functional) do |t|
+    t.test_files = FileList['test/functional/*_test.rb'] - [
+      'test/functional/grid_io_test.rb',
+      'test/functional/grid_test.rb',
+      'test/functional/ssl_test.rb'
+    ]
+    t.libs << 'test'
+  end
+
   Rake::TestTask.new(:replica_set) do |t|
     disabled = [
       'test/replica_set/complex_connect_test.rb',
       'test/replica_set/count_test.rb',
-      'test/replica_set/read_preference_test.rb'
+      'test/replica_set/read_preference_test.rb',
+      'test/replica_set/ssl_test.rb'
     ]
 
     t.test_files = FileList['test/replica_set/*_test.rb'] - disabled
-    t.libs << 'test'
-    #t.verbose = true
-    #t.options = '-v'
-  end
-
-  Rake::TestTask.new(:functional) do |t|
-    t.test_files = FileList['test/functional/*_test.rb'] - [
-      "test/functional/grid_io_test.rb",
-      "test/functional/grid_test.rb"
-    ]
     t.libs << 'test'
   end
 

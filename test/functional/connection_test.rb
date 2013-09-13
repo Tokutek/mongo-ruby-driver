@@ -1,3 +1,17 @@
+# Copyright (C) 2013 10gen Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 require 'test_helper'
 require 'logger'
 require 'stringio'
@@ -108,11 +122,23 @@ class TestConnection < Test::Unit::TestCase
       ENV['MONGODB_URI'] = "mongodb://#{host_port}/"
       con = MongoClient.from_uri
       db = con.db
-      assert_equal db.name, Mongo::MongoClient::DEFAULT_DB_NAME
+      assert_equal db.name, MongoClient::DEFAULT_DB_NAME
     ensure
       ENV['MONGODB_URI'] = old_mongodb_uri
     end
   end
+
+  def test_db_from_uri_from_string_param
+    db_name = "_database"
+    db = MongoClient.from_uri("mongodb://#{host_port}/#{db_name}").db
+    assert_equal db.name, db_name
+  end
+
+  def test_db_from_uri_from_string_param_no_db_name
+    db = MongoClient.from_uri("mongodb://#{host_port}").db
+    assert_equal db.name, MongoClient::DEFAULT_DB_NAME
+  end
+
 
   def test_server_version
     assert_match(/\d\.\d+(\.\d+)?/, @client.server_version.to_s)
@@ -261,12 +287,11 @@ class TestConnection < Test::Unit::TestCase
     assert_match(/unlock/, @client.unlock!['info'])
     unlocked = false
     counter  = 0
-    while counter < 5
+    while counter < 100
       if @client['admin']['$cmd.sys.inprog'].find_one['fsyncLock'].nil?
         unlocked = true
         break
       else
-        sleep(1)
         counter += 1
       end
     end
@@ -354,8 +379,8 @@ class TestConnection < Test::Unit::TestCase
   context "Saved authentications" do
     setup do
       @client = standard_connection
-      @auth = {:db_name => 'test', :username => 'bob', :password => 'secret'}
-      @client.add_auth(@auth[:db_name], @auth[:username], @auth[:password])
+      @auth = {:db_name => 'test', :username => 'bob', :password => 'secret', :source => nil}
+      @client.add_auth(@auth[:db_name], @auth[:username], @auth[:password], @auth[:source])
     end
 
     teardown do
@@ -367,9 +392,9 @@ class TestConnection < Test::Unit::TestCase
     end
 
     should "not allow multiple authentications for the same db" do
-      auth = {:db_name => 'test', :username => 'mickey', :password => 'm0u53'}
+      auth = {:db_name => 'test', :username => 'mickey', :password => 'm0u53', :source => nil}
       assert_raise Mongo::MongoArgumentError do
-        @client.add_auth(auth[:db_name], auth[:username], auth[:password])
+        @client.add_auth(auth[:db_name], auth[:username], auth[:password], auth[:source])
       end
     end
 

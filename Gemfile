@@ -3,13 +3,17 @@ source 'https://rubygems.org'
 gem 'json'
 gem 'rake', :require => ['rake/testtask']
 gem 'rake-compiler', :require => ['rake/extensiontask', 'rake/javaextensiontask']
-gem 'activesupport'
+if RUBY_VERSION < '1.9.3'
+  gem 'activesupport', '~>3.0'
+else
+  gem 'activesupport'
+end
 
 group :deploy do
   gem 'git'
   gem 'yard'
   gem 'version_bumper'
-  gem 'redcarpet' unless RUBY_PLATFORM =~ /java/
+  gem 'kramdown'
 end
 
 group :testing do

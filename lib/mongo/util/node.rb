@@ -1,3 +1,17 @@
+# Copyright (C) 2013 10gen Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 module Mongo
   class Node
 
@@ -48,9 +62,11 @@ module Mongo
       @node_mutex.synchronize do
         begin
           @socket = @client.socket_class.new(@host, @port,
-            @client.op_timeout, @client.connect_timeout
-          )
-        rescue OperationTimeout, ConnectionFailure, OperationFailure, SocketError, SystemCallError, IOError => ex
+                                             @client.op_timeout,
+                                             @client.connect_timeout,
+                                             @client.socket_opts)
+        rescue ConnectionTimeoutError, OperationTimeout, ConnectionFailure, OperationFailure,
+               SocketError, SystemCallError, IOError => ex
           @client.log(:debug, "Failed connection to #{host_string} with #{ex.class}, #{ex.message}.")
           close
         end
@@ -89,7 +105,14 @@ module Mongo
             @last_state = @config['ismaster'] ? :primary : :other
           end
 
-          @config = @client['admin'].command({:ismaster => 1}, :socket => @socket)
+          if @client.connect_timeout
+            Timeout::timeout(@client.connect_timeout, OperationTimeout) do
+              @config = @client['admin'].command({:ismaster => 1}, :socket => @socket)
+            end
+          else
+            @config = @client['admin'].command({:ismaster => 1}, :socket => @socket)
+          end
+
           update_max_sizes
 
           if @config['msg']

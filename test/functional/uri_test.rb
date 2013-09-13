@@ -1,3 +1,17 @@
+# Copyright (C) 2013 10gen Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 require 'test_helper'
 
 class URITest < Test::Unit::TestCase
@@ -39,24 +53,22 @@ class URITest < Test::Unit::TestCase
     assert_equal "b:ob", parser.auths[0][:username]
   end
 
+  def test_username_with_encoded_symbol
+    parser = Mongo::URIParser.new('mongodb://f%40o:bar@localhost/admin')
+    username = parser.auths.first[:username]
+    assert_equal 'f@o', username
+  end
+
+  def test_password_with_encoded_symbol
+    parser = Mongo::URIParser.new('mongodb://foo:b%40r@localhost/admin')
+    password = parser.auths.first[:password]
+    assert_equal 'b@r', password
+  end
+
   def test_passwords_contain_no_commas
     assert_raise MongoArgumentError do
       Mongo::URIParser.new('mongodb://bob:a,b@a.example.com:27018/test')
     end
-  end
-
-  def test_multiple_uris_with_auths
-    parser = Mongo::URIParser.new('mongodb://bob:secret@a.example.com:27018,b.example.com/test')
-    assert_equal 2, parser.nodes.length
-    assert_equal ['a.example.com', 27018], parser.nodes[0]
-    assert_equal ['b.example.com', 27017], parser.nodes[1]
-    assert_equal 2, parser.auths.length
-    assert_equal "bob", parser.auths[0][:username]
-    assert_equal "secret", parser.auths[0][:password]
-    assert_equal "test", parser.auths[0][:db_name]
-    assert_equal "bob", parser.auths[1][:username]
-    assert_equal "secret", parser.auths[1][:password]
-    assert_equal "test", parser.auths[1][:db_name]
   end
 
   def test_opts_with_semincolon_separator

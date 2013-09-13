@@ -1,4 +1,20 @@
 /*
+ * Copyright (C) 2013 10gen Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
  * This file contains C implementations of some of the functions needed by the
  * bson module. If possible, these implementations should be used to speed up
  * BSON encoding and decoding.
@@ -98,13 +114,14 @@ static int max_bson_size;
 #define STR_NEW(p,n) rb_str_new((p), (n))
 #endif
 
-static void write_utf8(bson_buffer_t buffer, VALUE string, char check_null) {
-    result_t status = check_string((unsigned char*)RSTRING_PTR(string), RSTRING_LEN(string),
-                                   1, check_null);
+static void write_utf8(bson_buffer_t buffer, VALUE string, int allow_null) {
+    result_t status = validate_utf8_encoding(
+        (const char*)RSTRING_PTR(string), RSTRING_LEN(string), allow_null);
+
     if (status == HAS_NULL) {
         bson_buffer_free(buffer);
         rb_raise(InvalidDocument, "Key names / regex patterns must not contain the NULL byte");
-    } else if (status == NOT_UTF_8) {
+    } else if (status == INVALID_UTF8) {
         bson_buffer_free(buffer);
         rb_raise(InvalidStringEncoding, "String not valid UTF-8");
     }
@@ -186,7 +203,7 @@ static VALUE pack_extra(bson_buffer_t buffer, VALUE check_keys) {
 
 static void write_name_and_type(bson_buffer_t buffer, VALUE name, char type) {
     SAFE_WRITE(buffer, &type, 1);
-    write_utf8(buffer, name, 1);
+    write_utf8(buffer, name, 0);
     SAFE_WRITE(buffer, &zero, 1);
 }
 
@@ -315,7 +332,7 @@ static int write_element(VALUE key, VALUE value, VALUE extra, int allow_id) {
             write_name_and_type(buffer, key, 0x02);
             length = RSTRING_LENINT(value) + 1;
             SAFE_WRITE(buffer, (char*)&length, 4);
-            write_utf8(buffer, value, 0);
+            write_utf8(buffer, value, 1);
             SAFE_WRITE(buffer, &zero, 1);
             break;
         }
@@ -447,7 +464,7 @@ static int write_element(VALUE key, VALUE value, VALUE extra, int allow_id) {
                 write_name_and_type(buffer, key, 0x02);
                 length = RSTRING_LENINT(str) + 1;
                 SAFE_WRITE(buffer, (char*)&length, 4);
-                write_utf8(buffer, str, 0);
+                write_utf8(buffer, str, 1);
                 SAFE_WRITE(buffer, &zero, 1);
                 break;
             }
@@ -488,7 +505,7 @@ static int write_element(VALUE key, VALUE value, VALUE extra, int allow_id) {
 
             write_name_and_type(buffer, key, 0x0B);
 
-            write_utf8(buffer, pattern, 1);
+            write_utf8(buffer, pattern, 0);
             SAFE_WRITE(buffer, &zero, 1);
 
             if (flags & IGNORECASE) {

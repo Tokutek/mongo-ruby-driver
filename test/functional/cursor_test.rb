@@ -1,3 +1,17 @@
+# Copyright (C) 2013 10gen Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 require 'test_helper'
 require 'logger'
 
@@ -80,6 +94,34 @@ class CursorTest < Test::Unit::TestCase
 
         @@coll.remove
       end
+    end
+  end
+
+  def test_exhaust_after_limit_error
+    c = Cursor.new(@@coll, :limit => 17)
+    assert_raise MongoArgumentError do
+      c.add_option(OP_QUERY_EXHAUST)
+    end
+
+    assert_raise MongoArgumentError do
+      c.add_option(OP_QUERY_EXHAUST + OP_QUERY_SLAVE_OK)
+    end
+  end
+
+  def test_limit_after_exhaust_error
+    c = Cursor.new(@@coll)
+    c.add_option(OP_QUERY_EXHAUST)
+    assert_raise MongoArgumentError do
+      c.limit(17)
+    end
+  end
+
+  def test_exhaust_with_mongos
+    @@connection.expects(:mongos?).returns(:true)
+    c = Cursor.new(@@coll)
+
+    assert_raise MongoArgumentError do
+      c.add_option(OP_QUERY_EXHAUST)
     end
   end
 
@@ -204,7 +246,7 @@ class CursorTest < Test::Unit::TestCase
     @@coll.save({:t => 't1'})
     @@coll.save({:t => 't1'})
     @@coll.save({:t => 't1'})
-    sleep(2)
+    sleep(1)
     t2 = Time.now
     t2_id = ObjectId.from_time(t2)
     @@coll.save({:t => 't2'})

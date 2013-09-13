@@ -1,3 +1,17 @@
+# Copyright (C) 2013 10gen Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 module Mongo
 
   # A cursor over query results. Returned objects are hashes.
@@ -103,7 +117,7 @@ module Mongo
     # @return [Hash, Nil] the next document or Nil if no documents remain.
     def next
       if @cache.length == 0
-        if @query_run && (@options & OP_QUERY_EXHAUST != 0)
+        if @query_run && exhaust?
           close
           return nil
         else
@@ -210,6 +224,11 @@ module Mongo
     def limit(number_to_return=nil)
       return @limit unless number_to_return
       check_modifiable
+
+      if (number_to_return != 0) && exhaust?
+        raise MongoArgumentError, "Limit is incompatible with exhaust option."
+      end
+
       @limit = number_to_return
       self
     end
@@ -367,6 +386,14 @@ module Mongo
     def add_option(opt)
       check_modifiable
 
+      if exhaust?(opt)
+        if @limit != 0
+          raise MongoArgumentError, "Exhaust is incompatible with limit."
+        elsif @connection.mongos?
+          raise MongoArgumentError, "Exhaust is incompatible with mongos."
+        end
+      end
+
       @options |= opt
       @options
     end
@@ -424,7 +451,7 @@ module Mongo
           {fields => 1}
         when Array
           return nil if fields.length.zero?
-          fields.each_with_object({}) { |field, hash| hash[field] = 1 }
+          fields.inject({}) { |hash, field| hash[field] = 1; hash }
         when Hash
           return fields
       end
@@ -433,7 +460,7 @@ module Mongo
     # Return the number of documents remaining for this cursor.
     def num_remaining
       if @cache.length == 0
-        if @query_run && (@options & OP_QUERY_EXHAUST != 0)
+        if @query_run && exhaust?
           close
           return 0
         else
@@ -469,7 +496,7 @@ module Mongo
           socket = @socket || checkout_socket_from_connection
           results, @n_received, @cursor_id = @connection.receive_message(
             Mongo::Constants::OP_QUERY, message, nil, socket, @command,
-            nil, @options & OP_QUERY_EXHAUST != 0)
+            nil, exhaust?)
         rescue ConnectionFailure => ex
           socket.close if socket
           @pool = nil
@@ -605,6 +632,13 @@ module Mongo
       if @limit > 0 && @returned >= @limit
         close
       end
+    end
+
+    # Check whether the exhaust option is set
+    #
+    # @return [true, false] The state of the exhaust flag.
+    def exhaust?(opts = options)
+      !(opts & OP_QUERY_EXHAUST).zero?
     end
 
     def check_modifiable

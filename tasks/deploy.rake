@@ -1,4 +1,16 @@
-# -*- mode: ruby; -*-
+# Copyright (C) 2013 10gen Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 desc "Installs gems from source"
 task :install => ['deploy:package'] do
@@ -39,7 +51,7 @@ namespace :deploy do
     g.add(['VERSION', 'ext/cbson/version.h'])
     g.commit "RELEASE #{bumper_version}"
     g.add_tag("#{bumper_version}")
-    g.push('origin', 'master', true)
+    g.push('origin', '1.x-stable', true)
   end
 
   desc "Package all gems for release"

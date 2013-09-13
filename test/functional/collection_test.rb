@@ -1,3 +1,17 @@
+# Copyright (C) 2013 10gen Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 require 'rbconfig'
 require 'test_helper'
 
@@ -253,6 +267,26 @@ continue_on_error is unimplemented in tokudb:
     assert_equal error_docs, invalid_docs
   end
 
+  def test_insert_one_error_doc_with_collect_on_error
+    invalid_doc = {'$invalid-key' => 1}
+    invalid_docs = [invalid_doc]
+    doc_ids, error_docs = @@test.insert(invalid_docs, :collect_on_error => true)
+    assert_equal [], doc_ids
+    assert_equal [invalid_doc], error_docs
+  end
+
+  def test_insert_empty_docs_raises_exception
+    assert_raise OperationFailure do
+      @@test.insert([])
+    end
+  end
+
+  def test_insert_empty_docs_with_collect_on_error_raises_exception
+    assert_raise OperationFailure do
+      @@test.insert([], :collect_on_error => true)
+    end
+  end
+
   def limited_collection
     conn = standard_connection(:connect => false)
     admin_db = Object.new
@@ -267,6 +301,94 @@ continue_on_error is unimplemented in tokudb:
     return conn.db(MONGO_TEST_DB)["test"]
   end
 
+  def test_non_operation_failure_halts_insertion_with_continue_on_error
+    coll = limited_collection
+    coll.stubs(:send_insert_message).raises(OperationTimeout).times(1)
+    docs = []
+    10.times do
+      docs << {'foo' => 'a' * 950}
+    end
+    assert_raise OperationTimeout do
+      coll.insert(docs, :continue_on_error => true)
+    end
+  end
+
+  def test_chunking_batch_insert
+     docs = []
+     10.times do
+       docs << {'foo' => 'a' * 950}
+     end
+     limited_collection.insert(docs)
+     assert_equal 10, limited_collection.count
+   end
+
+  def test_chunking_batch_insert_without_collect_on_error
+    docs = []
+    4.times do
+      docs << {'foo' => 'a' * 950}
+    end
+    invalid_docs = []
+    invalid_docs << {'$invalid-key' => 1} # non utf8 encoding
+    docs += invalid_docs
+    4.times do
+      docs << {'foo' => 'a' * 950}
+    end
+    assert_raise BSON::InvalidKeyName do
+      limited_collection.insert(docs, :collect_on_error => false)
+    end
+  end
+
+  def test_chunking_batch_insert_with_collect_on_error
+   # Broken for current JRuby
+   if RUBY_PLATFORM == 'java' then return end
+    docs = []
+    4.times do
+      docs << {'foo' => 'a' * 950}
+    end
+    invalid_docs = []
+    invalid_docs << {'$invalid-key' => 1} # non utf8 encoding
+    docs += invalid_docs
+    4.times do
+      docs << {'foo' => 'a' * 950}
+    end
+    doc_ids, error_docs = limited_collection.insert(docs, :collect_on_error => true)
+    assert_equal 8, doc_ids.count
+    assert_equal doc_ids.count, limited_collection.count
+    assert_equal error_docs, invalid_docs
+  end
+
+  def test_chunking_batch_insert_with_continue_on_error
+    docs = []
+    4.times do
+      docs << {'foo' => 'a' * 950}
+    end
+    docs << {'_id' => 'b', 'foo' => 'a'}
+    docs << {'_id' => 'b', 'foo' => 'c'}
+    4.times do
+      docs << {'foo' => 'a' * 950}
+    end
+    assert_raise OperationFailure do
+      limited_collection.insert(docs, :continue_on_error => true)
+    end
+    assert_equal 9, limited_collection.count
+  end
+
+  def test_chunking_batch_insert_without_continue_on_error
+    docs = []
+    4.times do
+      docs << {'foo' => 'a' * 950}
+    end
+    docs << {'_id' => 'b', 'foo' => 'a'}
+    docs << {'_id' => 'b', 'foo' => 'c'}
+    4.times do
+      docs << {'foo' => 'a' * 950}
+    end
+    assert_raise OperationFailure do
+      limited_collection.insert(docs, :continue_on_error => false)
+    end
+    assert_equal 5, limited_collection.count
+  end
+
   def test_maximum_insert_size
     docs = []
     3.times do
@@ -278,17 +400,6 @@ continue_on_error is unimplemented in tokudb:
   def test_maximum_document_size
     assert_raise InvalidDocument do
       limited_collection.insert({'foo' => 'a' * 1024})
-    end
-  end
-
-  def test_maximum_message_size
-    docs = []
-    4.times do
-      docs << {'foo' => 'a' * 950}
-    end
-
-    assert_raise InvalidOperation do
-      limited_collection.insert(docs)
     end
   end
 
@@ -638,42 +749,42 @@ continue_on_error is unimplemented in tokudb:
     # save some data
     @@test.save( {
         "_id" => 1,
-        "title" => "this is my title", 
-        "author" => "bob", 
+        "title" => "this is my title",
+        "author" => "bob",
         "posted" => Time.utc(2000),
-        "pageViews" => 5 , 
+        "pageViews" => 5 ,
         "tags" => [ "fun" , "good" , "fun" ],
-        "comments" => [ 
-                        { "author" => "joe", "text" => "this is cool" }, 
-                        { "author" => "sam", "text" => "this is bad" } 
+        "comments" => [
+                        { "author" => "joe", "text" => "this is cool" },
+                        { "author" => "sam", "text" => "this is bad" }
             ],
         "other" => { "foo" => 5 }
         } )
 
     @@test.save( {
          "_id" => 2,
-         "title" => "this is your title", 
-         "author" => "dave", 
+         "title" => "this is your title",
+         "author" => "dave",
          "posted" => Time.utc(2001),
-         "pageViews" => 7, 
+         "pageViews" => 7,
          "tags" => [ "fun" , "nasty" ],
-         "comments" => [ 
-                         { "author" => "barbara" , "text" => "this is interesting" }, 
-                         { "author" => "jenny", "text" => "i like to play pinball", "votes" => 10 } 
+         "comments" => [
+                         { "author" => "barbara" , "text" => "this is interesting" },
+                         { "author" => "jenny", "text" => "i like to play pinball", "votes" => 10 }
          ],
           "other" => { "bar" => 14 }
         })
 
     @@test.save( {
             "_id" => 3,
-            "title" => "this is some other title", 
-            "author" => "jane", 
+            "title" => "this is some other title",
+            "author" => "jane",
             "posted" => Time.utc(2002),
-            "pageViews" => 6 , 
+            "pageViews" => 6 ,
             "tags" => [ "nasty", "filthy" ],
-            "comments" => [ 
-                { "author" => "will" , "text" => "i don't like the color" } , 
-                { "author" => "jenny" , "text" => "can i get that in green?" } 
+            "comments" => [
+                { "author" => "will" , "text" => "i don't like the color" } ,
+                { "author" => "jenny" , "text" => "can i get that in green?" }
             ],
             "other" => { "bar" => 14 }
         })
@@ -705,8 +816,8 @@ continue_on_error is unimplemented in tokudb:
 
     def test_aggregate_pipeline_operators_using_strings
       setup_aggregate_data
-      desired_results = [ {"_id"=>1, "pageViews"=>5, "tags"=>["fun", "good", "fun"]}, 
-                          {"_id"=>2, "pageViews"=>7, "tags"=>["fun", "nasty"]}, 
+      desired_results = [ {"_id"=>1, "pageViews"=>5, "tags"=>["fun", "good", "fun"]},
+                          {"_id"=>2, "pageViews"=>7, "tags"=>["fun", "nasty"]},
                           {"_id"=>3, "pageViews"=>6, "tags"=>["nasty", "filthy"]} ]
       results = @@test.aggregate([{"$project" => {"tags" => 1, "pageViews" => 1}}])
       assert_equal desired_results, results
@@ -714,8 +825,8 @@ continue_on_error is unimplemented in tokudb:
 
     def test_aggregate_pipeline_operators_using_symbols
       setup_aggregate_data
-      desired_results = [ {"_id"=>1, "pageViews"=>5, "tags"=>["fun", "good", "fun"]}, 
-                          {"_id"=>2, "pageViews"=>7, "tags"=>["fun", "nasty"]}, 
+      desired_results = [ {"_id"=>1, "pageViews"=>5, "tags"=>["fun", "good", "fun"]},
+                          {"_id"=>2, "pageViews"=>7, "tags"=>["fun", "nasty"]},
                           {"_id"=>3, "pageViews"=>6, "tags"=>["nasty", "filthy"]} ]
       results = @@test.aggregate([{"$project" => {:tags => 1, :pageViews => 1}}])
       assert_equal desired_results, results
@@ -730,25 +841,25 @@ continue_on_error is unimplemented in tokudb:
     def test_aggregate_pipeline_unwind
       setup_aggregate_data
       desired_results = [ {"_id"=>1, "title"=>"this is my title", "author"=>"bob", "posted"=>Time.utc(2000),
-                          "pageViews"=>5, "tags"=>"fun", "comments"=>[{"author"=>"joe", "text"=>"this is cool"}, 
+                          "pageViews"=>5, "tags"=>"fun", "comments"=>[{"author"=>"joe", "text"=>"this is cool"},
                             {"author"=>"sam", "text"=>"this is bad"}], "other"=>{"foo"=>5 } },
                           {"_id"=>1, "title"=>"this is my title", "author"=>"bob", "posted"=>Time.utc(2000),
-                            "pageViews"=>5, "tags"=>"good", "comments"=>[{"author"=>"joe", "text"=>"this is cool"}, 
+                            "pageViews"=>5, "tags"=>"good", "comments"=>[{"author"=>"joe", "text"=>"this is cool"},
                             {"author"=>"sam", "text"=>"this is bad"}], "other"=>{"foo"=>5 } },
                           {"_id"=>1, "title"=>"this is my title", "author"=>"bob", "posted"=>Time.utc(2000),
-                            "pageViews"=>5, "tags"=>"fun", "comments"=>[{"author"=>"joe", "text"=>"this is cool"}, 
+                            "pageViews"=>5, "tags"=>"fun", "comments"=>[{"author"=>"joe", "text"=>"this is cool"},
                               {"author"=>"sam", "text"=>"this is bad"}], "other"=>{"foo"=>5 } },
                           {"_id"=>2, "title"=>"this is your title", "author"=>"dave", "posted"=>Time.utc(2001),
-                            "pageViews"=>7, "tags"=>"fun", "comments"=>[{"author"=>"barbara", "text"=>"this is interesting"}, 
+                            "pageViews"=>7, "tags"=>"fun", "comments"=>[{"author"=>"barbara", "text"=>"this is interesting"},
                               {"author"=>"jenny", "text"=>"i like to play pinball", "votes"=>10 }], "other"=>{"bar"=>14 } },
                           {"_id"=>2, "title"=>"this is your title", "author"=>"dave", "posted"=>Time.utc(2001),
-                            "pageViews"=>7, "tags"=>"nasty", "comments"=>[{"author"=>"barbara", "text"=>"this is interesting"}, 
+                            "pageViews"=>7, "tags"=>"nasty", "comments"=>[{"author"=>"barbara", "text"=>"this is interesting"},
                               {"author"=>"jenny", "text"=>"i like to play pinball", "votes"=>10 }], "other"=>{"bar"=>14 } },
                           {"_id"=>3, "title"=>"this is some other title", "author"=>"jane", "posted"=>Time.utc(2002),
-                            "pageViews"=>6, "tags"=>"nasty", "comments"=>[{"author"=>"will", "text"=>"i don't like the color"}, 
+                            "pageViews"=>6, "tags"=>"nasty", "comments"=>[{"author"=>"will", "text"=>"i don't like the color"},
                               {"author"=>"jenny", "text"=>"can i get that in green?"}], "other"=>{"bar"=>14 } },
                           {"_id"=>3, "title"=>"this is some other title", "author"=>"jane", "posted"=>Time.utc(2002),
-                            "pageViews"=>6, "tags"=>"filthy", "comments"=>[{"author"=>"will", "text"=>"i don't like the color"}, 
+                            "pageViews"=>6, "tags"=>"filthy", "comments"=>[{"author"=>"will", "text"=>"i don't like the color"},
                               {"author"=>"jenny", "text"=>"can i get that in green?"}], "other"=>{"bar"=>14 } }
                           ]
       results = @@test.aggregate([{"$unwind"=> "$tags"}])
@@ -868,7 +979,9 @@ map reduce is unimplemented in tokudb:
       @@test << { :a => 2, :processed => false }
       @@test << { :a => 3, :processed => false }
 
-      @@test.find_and_modify(:query => {}, :sort => [['a', -1]], :update => {"$set" => {:processed => true}})
+      @@test.find_and_modify(:query => {},
+                             :sort => [['a', -1]],
+                             :update => {"$set" => {:processed => true}})
 
       assert @@test.find_one({:a => 3})['processed']
     end
@@ -881,6 +994,21 @@ map reduce is unimplemented in tokudb:
       assert_raise Mongo::OperationFailure do
         @@test.find_and_modify(:blimey => {})
       end
+    end
+
+    def test_find_and_modify_with_full_response
+      @@test << { :a => 1, :processed => false }
+      @@test << { :a => 2, :processed => false }
+      @@test << { :a => 3, :processed => false }
+
+      doc = @@test.find_and_modify(:query => {},
+                                   :sort => [['a', -1]],
+                                   :update => {"$set" => {:processed => true}},
+                                   :full_response => true,
+                                   :new => true)
+
+      assert doc['value']['processed']
+      assert ['ok', 'value', 'lastErrorObject'].all? { |key| doc.key?(key) }
     end
   end
 
@@ -1071,7 +1199,7 @@ end
   end
 
   def test_ensure_index_timeout
-    @@db.cache_time = 2
+    @@db.cache_time = 1
     coll = @@db['ensure_test']
     coll.expects(:generate_indexes).twice
     coll.ensure_index([['a', 1]])
@@ -1082,7 +1210,7 @@ end
     coll.ensure_index([['a', 1]])
     coll.ensure_index([['a', 1]])
 
-    sleep(3)
+    sleep(1)
     # This won't be, so generate_indexes will be called twice
     coll.ensure_index([['a', 1]])
   end
@@ -1158,7 +1286,7 @@ disklocs don't exist in tokudb:
   end
 
   context "Grouping with a key function" do
-    setup do 
+    setup do
       @@test.remove
       @@test.save("a" => 1)
       @@test.save("a" => 2)
