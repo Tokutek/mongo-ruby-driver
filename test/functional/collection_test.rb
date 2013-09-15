@@ -386,7 +386,9 @@ continue_on_error is unimplemented in tokudb:
     assert_raise OperationFailure do
       limited_collection.insert(docs, :continue_on_error => false)
     end
-    assert_equal 5, limited_collection.count
+    # The first batch will be of three docs, then the second batch will fail with a duplicate _id.
+    # TODO: maybe fix chunking batches to use MSTs
+    assert_equal 3, limited_collection.count
   end
 
   def test_maximum_insert_size
