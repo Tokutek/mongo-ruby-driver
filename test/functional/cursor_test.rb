@@ -98,21 +98,27 @@ class CursorTest < Test::Unit::TestCase
   end
 
   def test_exhaust_after_limit_error
-    c = Cursor.new(@@coll, :limit => 17)
-    assert_raise MongoArgumentError do
-      c.add_option(OP_QUERY_EXHAUST)
-    end
+    # OP_QUERY_EXHAUST doesn't work over a sharded connection because of SERVER-2627
+    unless @@connection.mongos?
+      c = Cursor.new(@@coll, :limit => 17)
+      assert_raise MongoArgumentError do
+        c.add_option(OP_QUERY_EXHAUST)
+      end
 
-    assert_raise MongoArgumentError do
-      c.add_option(OP_QUERY_EXHAUST + OP_QUERY_SLAVE_OK)
+      assert_raise MongoArgumentError do
+        c.add_option(OP_QUERY_EXHAUST + OP_QUERY_SLAVE_OK)
+      end
     end
   end
 
   def test_limit_after_exhaust_error
-    c = Cursor.new(@@coll)
-    c.add_option(OP_QUERY_EXHAUST)
-    assert_raise MongoArgumentError do
-      c.limit(17)
+    # OP_QUERY_EXHAUST doesn't work over a sharded connection because of SERVER-2627
+    unless @@connection.mongos?
+      c = Cursor.new(@@coll)
+      c.add_option(OP_QUERY_EXHAUST)
+      assert_raise MongoArgumentError do
+        c.limit(17)
+      end
     end
   end
 
