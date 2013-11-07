@@ -22,6 +22,7 @@ class DBAPITest < Test::Unit::TestCase
   @@db   = @@client.db(MONGO_TEST_DB)
   @@coll = @@db.collection('test')
   @@version = @@client.server_version
+  @@tokumx_version = @@client.server_info["tokumxVersion"]
 
   def setup
     @@coll.remove
@@ -799,6 +800,9 @@ rename is unimplemented in tokudb:
 
   # doesn't really test functionality, just that the option is set correctly
   def test_snapshot
+    # TokuMX > 1.3.x ignores $snapshot
+    return if @@tokumx_version > "1.3.9999"
+
     @@db.collection("test").find({}, :snapshot => true).to_a
     assert_raise OperationFailure do
       @@db.collection("test").find({}, :snapshot => true, :sort => 'a').to_a
