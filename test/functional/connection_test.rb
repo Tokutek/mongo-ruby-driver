@@ -274,36 +274,6 @@ class TestConnection < Test::Unit::TestCase
     assert_equal ['bar', 27018], seeds[1]
   end
 
-  def test_fsync_lock
-    # fsync_lock unsupported on mongos
-    if @client.mongos?
-      return
-    end
-    # fsync_lock unsupported on tokumx >1.3
-    tokumx_version = ServerVersion.new(@client.server_info['tokumxVersion'])
-    if tokumx_version > ServerVersion.new('1.3.9999')
-      return
-    end
-
-    assert !@client.locked?
-    @client.lock!
-    assert @client.locked?
-    assert [1, true].include?(@client['admin']['$cmd.sys.inprog'].find_one['fsyncLock'])
-    assert_match(/unlock/, @client.unlock!['info'])
-    unlocked = false
-    counter  = 0
-    while counter < 100
-      if @client['admin']['$cmd.sys.inprog'].find_one['fsyncLock'].nil?
-        unlocked = true
-        break
-      else
-        counter += 1
-      end
-    end
-    assert !@client.locked?
-    assert unlocked, "mongod failed to unlock"
-  end
-
   def test_max_bson_size_value
     conn = standard_connection(:connect => false)
 
