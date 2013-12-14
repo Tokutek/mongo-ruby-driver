@@ -279,6 +279,11 @@ class TestConnection < Test::Unit::TestCase
     if @client.mongos?
       return
     end
+    # fsync_lock unsupported on tokumx >1.3
+    tokumx_version = ServerVersion.new(@client.server_version['tokumxVersion'])
+    if tokumx_version > ServerVersion.new('1.3.9999')
+      return
+    end
 
     assert !@client.locked?
     @client.lock!
