@@ -170,8 +170,7 @@ class TestConnection < Test::Unit::TestCase
     assert_not_nil info
     assert_kind_of Hash, info
     assert_not_nil info[MONGO_TEST_DB]
-    # disabling this check until we fix Tokutek/mongo#57
-    #assert info[MONGO_TEST_DB] > 0
+    assert info[MONGO_TEST_DB] > 0
 
     @client.drop_database(MONGO_TEST_DB)
   end
