@@ -170,7 +170,10 @@ class TestConnection < Test::Unit::TestCase
     assert_not_nil info
     assert_kind_of Hash, info
     assert_not_nil info[MONGO_TEST_DB]
-    assert info[MONGO_TEST_DB] > 0
+    if @client.server_version > "1.3.9999"
+      # Tokutek/mongo#57 was fixed in 1.4.0, until then this returned 0
+      assert info[MONGO_TEST_DB] > 0
+    end
 
     @client.drop_database(MONGO_TEST_DB)
   end
