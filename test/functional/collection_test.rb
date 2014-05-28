@@ -16,7 +16,7 @@ require 'rbconfig'
 require 'test_helper'
 
 class TestCollection < Test::Unit::TestCase
-  @@client       ||= standard_connection(:op_timeout => 10)
+  @@client       ||= standard_connection(:op_timeout => 60)
   @@db           = @@client.db(MONGO_TEST_DB)
   @@test         = @@db.collection("test")
   @@version      = @@client.server_version
