@@ -25,8 +25,6 @@ class TestCollection < Test::Unit::TestCase
     @@test.remove
   end
 
-=begin
-capped collections are unimplemented in tokudb:
   def test_capped_method
     @@db.create_collection('normal')
     assert !@@db['normal'].capped?
@@ -36,7 +34,6 @@ capped collections are unimplemented in tokudb:
     assert @@db['c'].capped?
     @@db.drop_collection('c')
   end
-=end
 
   def test_optional_pk_factory
     @coll_default_pk = @@db.collection('stuff')
@@ -97,8 +94,6 @@ capped collections are unimplemented in tokudb:
     assert_equal 5, @@db.collection("test.foo").find_one()["x"]
   end
 
-=begin
-rename is unimplemented in tokudb:
   def test_rename_collection
     @@db.drop_collection('foo1')
     @@db.drop_collection('bar1')
@@ -109,7 +104,6 @@ rename is unimplemented in tokudb:
     @col.rename('bar1')
     assert_equal 'bar1', @col.name
   end
-=end
 
   def test_nil_id
     assert_equal 5, @@test.insert({"_id" => 5, "foo" => "bar"})
@@ -870,8 +864,6 @@ continue_on_error is unimplemented in tokudb:
   end
 
   if @@version > "1.1.1"
-=begin
-map reduce is unimplemented in tokudb:
     def test_map_reduce
       @@test << { "user_id" => 1 }
       @@test << { "user_id" => 2 }
@@ -972,7 +964,6 @@ map reduce is unimplemented in tokudb:
         assert res.find.to_a.any? {|doc| doc["_id"] == 2 && doc["value"] == 1}
       end
     end
-=end
   end
 
   if @@version > "1.3.0"
@@ -1509,7 +1500,7 @@ drop_dups is disabled in tokudb:
     end
 
 =begin
-tokudb doesn't have silly restrictions like this
+tokumx doesn't have silly restrictions like this
     should "raise an error if index name is greater than 128" do
       assert_raise Mongo::OperationFailure do
         @collection.create_index([['a' * 25, 1], ['b' * 25, 1],
@@ -1551,8 +1542,6 @@ tokudb doesn't have silly restrictions like this
     end
   end
 
-=begin
-capped collections are unimplemented in tokudb:
   context "Capped collections" do
     setup do
       @@db.drop_collection('log')
@@ -1590,6 +1579,5 @@ capped collections are unimplemented in tokudb:
       assert tail.next_document
     end
   end
-=end
 
 end

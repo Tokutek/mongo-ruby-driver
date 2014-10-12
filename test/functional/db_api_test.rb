@@ -326,14 +326,11 @@ class DBAPITest < Test::Unit::TestCase
     @@db.strict = true
 
     begin
-=begin
-capped unimplemented in tokudb:
       coll = @@db.create_collection('foobar', :capped => true, :size => 1024)
       options = coll.options
       assert_equal 'foobar', options['create']
       assert_equal true, options['capped']
       assert_equal 1024, options['size']
-=end
       coll = @@db.create_collection('foobar',
                                     :compression => 'zlib',
                                     :page_size => 8*1024*1024,
@@ -757,8 +754,6 @@ HERE
     end
   end
 
-=begin
-rename is unimplemented in tokudb:
   def test_rename_collection
     @@db.drop_collection("foo")
     @@db.drop_collection("bar")
@@ -796,7 +791,6 @@ rename is unimplemented in tokudb:
 
     assert_equal 2, a.count()
   end
-=end
 
   # doesn't really test functionality, just that the option is set correctly
   def test_snapshot
