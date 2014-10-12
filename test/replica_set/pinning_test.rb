@@ -1,4 +1,4 @@
-# Copyright (C) 2013 10gen Inc.
+# Copyright (C) 2009-2013 MongoDB, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@ require 'test_helper'
 class ReplicaSetPinningTest < Test::Unit::TestCase
   def setup
     ensure_cluster(:rs)
-    @client = MongoReplicaSetClient.new(@rs.repl_set_seeds, :name => @rs.repl_set_name)
-    @db = @client.db(MONGO_TEST_DB)
+    @client = MongoReplicaSetClient.from_uri(@uri)
+    @db = @client.db(TEST_DB)
     @coll = @db.collection("test-sets")
     @coll.insert({:a => 1})
   end

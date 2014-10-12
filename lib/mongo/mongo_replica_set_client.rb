@@ -1,4 +1,4 @@
-# Copyright (C) 2013 10gen Inc.
+# Copyright (C) 2009-2013 MongoDB, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -47,10 +47,16 @@ module Mongo
     #   @param [Array<String>, Array<Array(String, Integer)>] seeds
     #
     #   @option opts [String, Integer, Symbol] :w (1) Set default number of nodes to which a write
-    #     should be acknowledged
-    #   @option opts [Boolean] :j (false) Set journal acknowledgement
-    #   @option opts [Integer] :wtimeout (nil) Set acknowledgement timeout
-    #   @option opts [Boolean] :fsync (false) Set fsync acknowledgement.
+    #     should be acknowledged.
+    #   @option opts [Integer] :wtimeout (nil) Set replica set acknowledgement timeout.
+    #   @option opts [Boolean] :j (false) If true, block until write operations have been committed
+    #     to the journal. Cannot be used in combination with 'fsync'. Prior to MongoDB 2.6 this option was
+    #     ignored if the server was running without journaling. Starting with MongoDB 2.6, write operations will
+    #     fail with an exception if this option is used when the server is running without journaling.
+    #   @option opts [Boolean] :fsync (false) If true, and the server is running without journaling, blocks until
+    #     the server has synced all data files to disk. If the server is running with journaling, this acts the same as
+    #     the 'j' option, blocking until write operations have been committed to the journal.
+    #     Cannot be used in combination with 'j'.
     #
     #     Notes about write concern options:
     #       Write concern options are propagated to objects instantiated from this MongoReplicaSetClient.
@@ -85,7 +91,8 @@ module Mongo
     #   @option opts [Boolean] :ssl (false) If true, create the connection to the server using SSL.
     #   @option opts [String] :ssl_cert (nil) The certificate file used to identify the local connection against MongoDB.
     #   @option opts [String] :ssl_key (nil) The private keyfile used to identify the local connection against MongoDB.
-    #     If included with the :ssl_cert then only :ssl_cert is needed.
+    #     Note that even if the key is stored in the same file as the certificate, both need to be explicitly specified.
+    #   @option opts [String] :ssl_key_pass_phrase (nil) A passphrase for the private key.
     #   @option opts [Boolean] :ssl_verify (nil) Specifies whether or not peer certification validation should occur.
     #   @option opts [String] :ssl_ca_cert (nil) The ca_certs file contains a set of concatenated "certification authority"
     #     certificates, which are used to validate certificates passed from the other end of the connection.
@@ -209,9 +216,9 @@ module Mongo
         if @manager.pools.empty?
           close
           raise ConnectionFailure, "Failed to connect to any node."
-        else
-          @connected = true
         end
+        check_wire_version_in_range
+        @connected = true
       end
     end
 
@@ -323,14 +330,6 @@ module Mongo
     # @return [Boolean] +true+
     def slave_ok?
       @read != :primary
-    end
-
-    def authenticate_pools
-      @manager.pools.each { |pool| pool.authenticate_existing }
-    end
-
-    def logout_pools(db)
-      @manager.pools.each { |pool| pool.logout_existing(db) }
     end
 
     # Generic socket checkout
@@ -455,6 +454,25 @@ module Mongo
     def max_message_size
       return local_manager.max_message_size if local_manager
       max_bson_size * MESSAGE_SIZE_FACTOR
+    end
+
+    def max_wire_version
+      return local_manager.max_wire_version if local_manager
+      0
+    end
+
+    def min_wire_version
+      return local_manager.min_wire_version if local_manager
+      0
+    end
+
+    def primary_wire_version_feature?(feature)
+      local_manager && local_manager.primary_pool && local_manager.primary_pool.node.wire_version_feature?(feature)
+    end
+
+    def max_write_batch_size
+      local_manager && local_manager.primary_pool && local_manager.primary_pool.node.max_write_batch_size ||
+        DEFAULT_MAX_WRITE_BATCH_SIZE
     end
 
     private

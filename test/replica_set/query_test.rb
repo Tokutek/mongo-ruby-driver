@@ -1,4 +1,4 @@
-# Copyright (C) 2013 10gen Inc.
+# Copyright (C) 2009-2013 MongoDB, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ class ReplicaSetQueryTest < Test::Unit::TestCase
 
   def setup
     ensure_cluster(:rs)
-    @client = MongoReplicaSetClient.new @rs.repl_set_seeds
-    @db = @client.db(MONGO_TEST_DB)
+    @client = MongoReplicaSetClient.from_uri(@uri)
+    @db = @client.db(TEST_DB)
     @db.drop_collection("test-sets")
     @coll = @db.collection("test-sets")
   end

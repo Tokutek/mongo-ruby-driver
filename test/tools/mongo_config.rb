@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-# Copyright (C) 2013 10gen Inc.
+# Copyright (C) 2009-2013 MongoDB, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ module Mongo
   class Config
     DEFAULT_BASE_OPTS = { :host => 'localhost', :dbpath => 'data', :logpath => 'data/log' }
     DEFAULT_REPLICA_SET = DEFAULT_BASE_OPTS.merge( :replicas => 3, :arbiters => 0 )
-    DEFAULT_SHARDED_SIMPLE = DEFAULT_BASE_OPTS.merge( :shards => 2, :configs => 1, :routers => 4 )
+    DEFAULT_SHARDED_SIMPLE = DEFAULT_BASE_OPTS.merge( :shards => 2, :configs => 1, :routers => 2 )
     DEFAULT_SHARDED_REPLICA = DEFAULT_SHARDED_SIMPLE.merge( :replicas => 3, :arbiters => 0)
 
     IGNORE_KEYS = [:host, :command, :_id]
@@ -50,7 +50,7 @@ module Mongo
     MONGODS_OPT_KEYS = [:mongods]
     CLUSTER_OPT_KEYS = SHARDING_OPT_KEYS + REPLICA_OPT_KEYS + MONGODS_OPT_KEYS
 
-    FLAGS = [:noprealloc, :smallfiles, :logappend, :configsvr, :shardsvr, :quiet, :fastsync, :auth]
+    FLAGS = [:noprealloc, :smallfiles, :logappend, :configsvr, :shardsvr, :quiet, :fastsync, :auth, :ipv6]
 
     DEFAULT_VERIFIES = 60
     BASE_PORT = 3000
@@ -64,6 +64,7 @@ module Mongo
       raise "missing required option" if [:host, :dbpath].any?{|k| !opts[k]}
 
       config = opts.reject {|k,v| CLUSTER_OPT_KEYS.include?(k)}
+
       kinds = CLUSTER_OPT_KEYS.select{|key| opts.has_key?(key)} # order is significant
 
       replica_count = 0
@@ -82,9 +83,11 @@ module Mongo
                 make_config(opts)
               when :routers
                 make_router(config, opts)
+              when :shards
+                make_standalone_shard(kind, opts)
               else
                 make_mongod(kind, opts)
-            end
+              end
 
             replica_count += 1 if [:replicas, :arbiters].member?(kind)
             node
@@ -117,6 +120,7 @@ module Mongo
       quiet      = opts[:quiet]      || true
       fast_sync  = opts[:fastsync]   || false
       auth       = opts[:auth]       || true
+      ipv6       = opts[:ipv6].nil? ? true : opts[:ipv6]
 
       params.merge(:command    => mongod,
                    :dbpath     => path,
@@ -124,7 +128,22 @@ module Mongo
                    :noprealloc => noprealloc,
                    :quiet      => quiet,
                    :fastsync   => fast_sync,
-                   :auth       => auth)
+                   :auth       => auth,
+                   :ipv6       => ipv6)
+    end
+
+    def self.key_file(opts)
+      keyFile = opts[:key_file] || '/test/fixtures/auth/keyfile'
+      keyFile = Dir.pwd << keyFile
+      system "chmod 600 #{keyFile}"
+      keyFile
+    end
+
+    # A regular mongod minus --auth and plus --keyFile.
+    def self.make_standalone_shard(kind, opts)
+      params = make_mongod(kind, opts)
+      params.delete(:auth)
+      params.merge(:keyFile => key_file(opts))
     end
 
     def self.make_replica(opts, id)
@@ -132,20 +151,18 @@ module Mongo
 
       replSet    = opts[:replSet]    || 'ruby-driver-test'
       oplogSize  = opts[:oplog_size] || 5
-      keyFile    = opts[:key_file]   || '/test/fixtures/auth/keyfile'
-
-      keyFile    = Dir.pwd << keyFile
-      system "chmod 600 #{keyFile}"
 
       params.merge(:_id       => id,
                    :replSet   => replSet,
                    :oplogSize => oplogSize,
-                   :keyFile   => keyFile)
+                   :keyFile   => key_file(opts))
     end
 
     def self.make_config(opts)
       params = make_mongod('configs', opts)
-      params.merge(:configsvr => nil)
+      params.delete(:auth)
+      params.merge(:configsvr => true,
+                   :keyFile => key_file(opts))
     end
 
     def self.make_router(config, opts)
@@ -153,8 +170,9 @@ module Mongo
       mongos = ENV['MONGOS'] || 'mongos'
 
       params.merge(
-        :command => mongos,
-        :configdb => self.configdb(config)
+        :command  => mongos,
+        :configdb => self.configdb(config),
+        :keyFile  => key_file(opts)
       )
     end
 
@@ -336,6 +354,35 @@ module Mongo
         @servers.collect{|k,v| (!key || key == k) ? v : nil}.flatten.compact
       end
 
+      def ensure_authenticated(client)
+        begin
+          client[TEST_DB].authenticate(TEST_USER, TEST_USER_PWD)
+        rescue Mongo::MongoArgumentError => ex
+          # client is already authenticated
+          raise ex unless ex.message =~ /already authenticated/
+        rescue Mongo::AuthenticationError => ex
+          # 1) The creds are wrong
+          # 2) Or the user doesn't exist
+          roles = [ 'dbAdminAnyDatabase',
+                    'userAdminAnyDatabase',
+                    'readWriteAnyDatabase',
+                    'clusterAdmin' ]
+          begin
+            # Try to add the user for case (2)
+            client[TEST_DB].add_user(TEST_USER, TEST_USER_PWD, nil, :roles => roles)
+            client[TEST_DB].authenticate(TEST_USER, TEST_USER_PWD)
+          rescue Mongo::ConnectionFailure, Mongo::OperationFailure => ex
+            # Maybe not master, so try to authenticate
+            # 2.2 throws an OperationFailure if add_user fails
+            begin
+              client[TEST_DB].authenticate(TEST_USER, TEST_USER_PWD)
+            rescue => ex
+              # Maybe creds are wrong, nothing we can do
+            end
+          end
+        end
+      end
+
       def command( cmd_servers, db_name, cmd, opts = {} )
         ret = []
         cmd = cmd.class == Array ? cmd : [ cmd ]
@@ -345,6 +392,7 @@ module Mongo
           debug 3, cmd_server.inspect
           cmd_server = cmd_server.config if cmd_server.is_a?(DbServer)
           client = Mongo::MongoClient.new(cmd_server[:host], cmd_server[:port])
+          ensure_authenticated(client)
           cmd.each do |c|
             debug 3,  "ClusterManager.command c:#{c.inspect}"
             response = client[db_name].command( c, opts )
@@ -358,6 +406,10 @@ module Mongo
         ret.size == 1 ? ret.first : ret
       end
 
+      def replica_set?
+        !!config[:replicas]
+      end
+
       def repl_set_get_status
         command( @config[:replicas], 'admin', { :replSetGetStatus => 1 }, {:check_response => false } )
       end
@@ -365,6 +417,7 @@ module Mongo
       def repl_set_get_config
         host, port = primary_name.split(":")
         client = Mongo::MongoClient.new(host, port)
+        ensure_authenticated(client)
         client['local']['system.replset'].find_one
       end
 
@@ -383,27 +436,48 @@ module Mongo
       end
 
       def repl_set_startup
-        states = nil
-        60.times do
-          states = repl_set_get_status.zip(repl_set_is_master)
+        states     = nil
+        healthy    = false
+
+        80.times do
+          # enter the thunderdome...
+          states  = repl_set_get_status.zip(repl_set_is_master)
           healthy = states.all? do |status, is_master|
-            members = status['members']
-            if status['ok'] == 1.0 && members.collect{|m| m['state']}.all?{|state| [1,2,7].index(state)}
-              members.any?{|m| m['state'] == 1} &&
-                case status['myState']
-                when 1
-                  is_master['ismaster'] == true && is_master['secondary'] == false
-                when 2
-                  is_master['ismaster'] == false && is_master['secondary'] == true
-                when 7
-                  is_master['ismaster'] == false && is_master['secondary'] == false
-                end
+            # check replica set status for member list
+            next unless status['ok'] == 1.0 && (members = status['members'])
+
+            # ensure all replica set members are in a valid state
+            next unless members.all? { |m| [1,2,7].include?(m['state']) }
+
+            # check for primary replica set member
+            next unless (primary = members.find { |m| m['state'] == 1 })
+
+            # check replica set member optimes
+            primary_optime = primary['optime'].seconds
+            next unless primary_optime && members.all? do |m|
+              m['state'] == 7 || primary_optime - m['optime'].seconds < 5
+            end
+
+            # check replica set state
+            case status['myState']
+              when 1
+                is_master['ismaster']  == true &&
+                is_master['secondary'] == false
+              when 2
+                is_master['ismaster']  == false &&
+                is_master['secondary'] == true
+              when 7
+                is_master['ismaster']  == false &&
+                is_master['secondary'] == false
             end
           end
-          return true if healthy
+
+          return healthy if healthy
           sleep(1)
         end
-        raise Mongo::OperationFailure, "replSet startup failed - status: #{states.inspect}"
+
+        raise Mongo::OperationFailure,
+          "replSet startup failed - status: #{states.inspect}"
       end
 
       def repl_set_seeds
@@ -418,13 +492,19 @@ module Mongo
         repl_set_seeds.join(',')
       end
 
+      def members_uri
+        members = @config[:replicas] || @config[:routers]
+        members.collect{|node| "#{node[:host]}:#{node[:port]}"}.join(',')
+      end
+
       def repl_set_name
         @config[:replicas].first[:replSet]
       end
 
       def member_names_by_state(state)
         states = Array(state)
-        status = repl_set_get_status.first
+        # Any status with a REMOVED node won't have the full cluster state
+        status = repl_set_get_status.find {|status| status['members'].find {|m| m['state'] == 'REMOVED'}.nil?}
         status['members'].find_all{|member| states.index(member['state']) }.collect{|member| member['name']}
       end
 
@@ -528,7 +608,15 @@ module Mongo
       end
 
       def addshards(shards = @config[:shards])
-        command( @config[:routers].first, 'admin', Array(shards).collect{|s| { :addshard => "#{s[:host]}:#{s[:port]}" } } )
+        begin
+          command( @config[:routers].first, 'admin', Array(shards).collect{|s| { :addshard => "#{s[:host]}:#{s[:port]}" } } )
+        rescue Mongo::OperationFailure => ex
+          # Because we cannot run the listshards command under the localhost
+          # exception in > 2.7.1, we run the risk of attempting to add the same shard twice.
+          # Our tests may add a local db to a shard, if the cluster is still up,
+          # then we can ignore this.
+          raise ex unless ex.message =~ /host already used/
+        end
       end
 
       def listshards
@@ -568,7 +656,29 @@ module Mongo
       end
       alias :restart :start
 
+      def delete_users
+        cmd_servers = replica_set? ? [ primary ] : routers
+
+        cmd_servers.each do |cmd_server|
+          begin
+            client = Mongo::MongoClient.new(cmd_server.config[:host],
+                                            cmd_server.config[:port])
+            ensure_authenticated(client)
+            db = client[TEST_DB]
+
+            if client.server_version < '2.5'
+              db['system.users'].remove
+            else
+              db.command(:dropAllUsersFromDatabase => 1)
+            end
+            break
+          rescue Mongo::ConnectionFailure
+          end
+        end
+      end
+
       def stop
+        delete_users
         servers.each{|server| server.stop}
         self
       end

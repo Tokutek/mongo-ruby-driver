@@ -1,4 +1,4 @@
-# Copyright (C) 2013 10gen Inc.
+# Copyright (C) 2009-2013 MongoDB, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ class ComplexConnectTest < Test::Unit::TestCase
   def test_complex_connect
     host = @rs.servers.first.host
     primary = MongoClient.new(host, @rs.primary.port)
+    authenticate_client(primary)
 
     @client = MongoReplicaSetClient.new([
       @rs.servers[2].host_port,
@@ -34,10 +35,11 @@ class ComplexConnectTest < Test::Unit::TestCase
       @rs.servers[0].host_port
     ])
 
+    authenticate_client(@client)
     version = @client.server_version
 
-    @client['test']['foo'].insert({:a => 1})
-    assert @client['test']['foo'].find_one
+    @client[TEST_DB]['complext-connect-test'].insert({:a => 1})
+    assert @client[TEST_DB]['complext-connect-test'].find_one
 
     config = primary['local']['system.replset'].find_one
     old_config = config.dup
@@ -55,22 +57,22 @@ class ComplexConnectTest < Test::Unit::TestCase
     end
     @rs.start
 
-
     assert_raise ConnectionFailure do
-      primary['admin'].command(step_down_command)
+      perform_step_down(primary)
     end
 
     # isMaster is currently broken in 2.1+ when called on removed nodes
     puts version
     if version < "2.1"
       rescue_connection_failure do
-        assert @client['test']['foo'].find_one
+        assert @client[TEST_DB]['complext-connect-test'].find_one
       end
 
-      assert @client['test']['foo'].find_one
+      assert @client[TEST_DB]['complext-connect-test'].find_one
     end
 
     primary = MongoClient.new(host, @rs.primary.port)
+    authenticate_client(primary)
     assert_raise ConnectionFailure do
       primary['admin'].command({:replSetReconfig => old_config})
     end
