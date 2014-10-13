@@ -330,10 +330,10 @@ class DBAPITest < Test::Unit::TestCase
       assert_equal 'foobar', options['create'] if @client.server_version < '2.5.5'
       assert_equal true, options['capped']
       assert_equal 4096, options['size']
-      coll = @@db.create_collection('foobar',
-                                    :compression => 'zlib',
-                                    :page_size => 8*1024*1024,
-                                    :read_page_size => 128*1024)
+      coll = @db.create_collection('foobar',
+                                   :compression => 'zlib',
+                                   :page_size => 8*1024*1024,
+                                   :read_page_size => 128*1024)
       options = coll.options()
       assert_equal 'foobar', options['create']
       assert_equal 'zlib', options['compression']
@@ -796,7 +796,7 @@ HERE
   # doesn't really test functionality, just that the option is set correctly
   def test_snapshot
     # TokuMX > 1.3.x ignores $snapshot
-    return if @@tokumx_version > "1.3.9999"
+    return if @tokumx_version > "1.3.9999"
 
     @db.collection("test").find({}, :snapshot => true).to_a
     assert_raise OperationFailure do
